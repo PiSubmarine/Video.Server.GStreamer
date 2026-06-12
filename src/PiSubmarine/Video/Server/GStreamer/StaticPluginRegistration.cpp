@@ -5,19 +5,19 @@
 #include <gst/gst.h>
 #include <spdlog/spdlog.h>
 
+GST_PLUGIN_STATIC_DECLARE(coreelements);
+GST_PLUGIN_STATIC_DECLARE(autodetect);
+GST_PLUGIN_STATIC_DECLARE(videoconvertscale);
+GST_PLUGIN_STATIC_DECLARE(video4linux2);
+GST_PLUGIN_STATIC_DECLARE(openh264);
+GST_PLUGIN_STATIC_DECLARE(rtp);
+GST_PLUGIN_STATIC_DECLARE(udp);
+
 namespace PiSubmarine::Video::Server::GStreamer
 {
     namespace
     {
         std::once_flag StaticPluginRegistrationFlag;
-
-        GST_PLUGIN_STATIC_DECLARE(coreelements);
-        GST_PLUGIN_STATIC_DECLARE(autodetect);
-        GST_PLUGIN_STATIC_DECLARE(videoconvertscale);
-        GST_PLUGIN_STATIC_DECLARE(video4linux2);
-        GST_PLUGIN_STATIC_DECLARE(openh264);
-        GST_PLUGIN_STATIC_DECLARE(rtp);
-        GST_PLUGIN_STATIC_DECLARE(udp);
     }
 
     void RegisterStaticPlugins(const std::shared_ptr<spdlog::logger>& logger)
