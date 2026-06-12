@@ -74,9 +74,18 @@ if(NOT GSTREAMER_STATIC_PLUGIN_DIR)
     endforeach()
 endif()
 
-function(_pisubmarine_link_gstreamer_static_plugin plugin_basename)
+set(PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES
+        coreelements
+        autodetect
+        videoconvertscale
+        video4linux2
+        openh264
+        rtp
+        udp)
+
+function(_pisubmarine_collect_gstreamer_static_plugin plugin_basename result_variable)
     if(NOT GSTREAMER_STATIC_PLUGIN_DIR)
-        message(STATUS "Skipping GStreamer static plugin '${plugin_basename}' because plugin dir is empty")
+        set(${result_variable} "" PARENT_SCOPE)
         return()
     endif()
 
@@ -84,27 +93,43 @@ function(_pisubmarine_link_gstreamer_static_plugin plugin_basename)
     unset(${_plugin_variable_name} CACHE)
     unset(${_plugin_variable_name})
 
+    set(_find_library_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+    if(UNIX)
+        set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    endif()
     find_library(${_plugin_variable_name}
             NAMES "gst${plugin_basename}" "libgst${plugin_basename}"
             PATHS "${GSTREAMER_STATIC_PLUGIN_DIR}"
             NO_DEFAULT_PATH)
-    if(${_plugin_variable_name})
-        message(STATUS "Linking GStreamer static plugin '${plugin_basename}' from ${${_plugin_variable_name}}")
-        target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC "${${_plugin_variable_name}}")
-    else()
-        message(STATUS "Failed to locate GStreamer static plugin '${plugin_basename}' in ${GSTREAMER_STATIC_PLUGIN_DIR}")
-    endif()
+    set(CMAKE_FIND_LIBRARY_SUFFIXES "${_find_library_suffixes}")
+
+    set(${result_variable} "${${_plugin_variable_name}}" PARENT_SCOPE)
 endfunction()
 
 message(STATUS "GStreamer static plugin dir: ${GSTREAMER_STATIC_PLUGIN_DIR}")
 
-_pisubmarine_link_gstreamer_static_plugin("coreelements")
-_pisubmarine_link_gstreamer_static_plugin("autodetect")
-_pisubmarine_link_gstreamer_static_plugin("videoconvertscale")
-_pisubmarine_link_gstreamer_static_plugin("video4linux2")
-_pisubmarine_link_gstreamer_static_plugin("openh264")
-_pisubmarine_link_gstreamer_static_plugin("rtp")
-_pisubmarine_link_gstreamer_static_plugin("udp")
+set(PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES "")
+set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS TRUE)
+foreach(_plugin_basename IN LISTS PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES)
+    _pisubmarine_collect_gstreamer_static_plugin("${_plugin_basename}" _plugin_library)
+    if(_plugin_library)
+        list(APPEND PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES "${_plugin_library}")
+    else()
+        set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS FALSE)
+        message(STATUS
+                "GStreamer static plugin archive '${_plugin_basename}' was not found in "
+                "${GSTREAMER_STATIC_PLUGIN_DIR}; falling back to dynamic plugin discovery")
+        break()
+    endif()
+endforeach()
+
+if(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS)
+    message(STATUS "Linking GStreamer static plugins: ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES}")
+    target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES})
+endif()
+
+target_compile_definitions(${PISUBMARINE_MODULE_NAME}
+        PRIVATE PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS=$<BOOL:${PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS}>)
 
 PiSubmarineAddDependency("https://github.com/PiSubmarine/Control.Video.Api.git" "")
 target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Control.Video.Api)

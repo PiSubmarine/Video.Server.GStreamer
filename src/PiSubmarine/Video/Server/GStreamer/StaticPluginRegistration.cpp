@@ -5,6 +5,9 @@
 #include <gst/gst.h>
 #include <spdlog/spdlog.h>
 
+#if PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS
+extern "C"
+{
 GST_PLUGIN_STATIC_DECLARE(coreelements);
 GST_PLUGIN_STATIC_DECLARE(autodetect);
 GST_PLUGIN_STATIC_DECLARE(videoconvertscale);
@@ -12,6 +15,8 @@ GST_PLUGIN_STATIC_DECLARE(video4linux2);
 GST_PLUGIN_STATIC_DECLARE(openh264);
 GST_PLUGIN_STATIC_DECLARE(rtp);
 GST_PLUGIN_STATIC_DECLARE(udp);
+}
+#endif
 
 namespace PiSubmarine::Video::Server::GStreamer
 {
@@ -24,6 +29,7 @@ namespace PiSubmarine::Video::Server::GStreamer
     {
         std::call_once(StaticPluginRegistrationFlag, [&logger]
         {
+#if PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS
             SPDLOG_LOGGER_INFO(logger, "Registering static GStreamer plugin 'coreelements'");
             GST_PLUGIN_STATIC_REGISTER(coreelements);
             SPDLOG_LOGGER_INFO(logger, "Registering static GStreamer plugin 'autodetect'");
@@ -38,6 +44,9 @@ namespace PiSubmarine::Video::Server::GStreamer
             GST_PLUGIN_STATIC_REGISTER(rtp);
             SPDLOG_LOGGER_INFO(logger, "Registering static GStreamer plugin 'udp'");
             GST_PLUGIN_STATIC_REGISTER(udp);
+#else
+            SPDLOG_LOGGER_INFO(logger, "GStreamer static plugin archives were not found; using dynamic plugin discovery");
+#endif
         });
     }
 }
