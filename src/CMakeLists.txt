@@ -80,13 +80,17 @@ function(_pisubmarine_link_gstreamer_static_plugin plugin_basename)
         return()
     endif()
 
-    find_library(_plugin_library
+    set(_plugin_variable_name "PISUBMARINE_GSTREAMER_PLUGIN_${plugin_basename}")
+    unset(${_plugin_variable_name} CACHE)
+    unset(${_plugin_variable_name})
+
+    find_library(${_plugin_variable_name}
             NAMES "gst${plugin_basename}" "libgst${plugin_basename}"
             PATHS "${GSTREAMER_STATIC_PLUGIN_DIR}"
             NO_DEFAULT_PATH)
-    if(_plugin_library)
-        message(STATUS "Linking GStreamer static plugin '${plugin_basename}' from ${_plugin_library}")
-        target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC "${_plugin_library}")
+    if(${_plugin_variable_name})
+        message(STATUS "Linking GStreamer static plugin '${plugin_basename}' from ${${_plugin_variable_name}}")
+        target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC "${${_plugin_variable_name}}")
     else()
         message(STATUS "Failed to locate GStreamer static plugin '${plugin_basename}' in ${GSTREAMER_STATIC_PLUGIN_DIR}")
     endif()
