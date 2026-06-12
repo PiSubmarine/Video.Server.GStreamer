@@ -73,7 +73,6 @@ set(PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES
         coreelements
         autodetect
         videoconvertscale
-        video4linux2
         openh264
         rtp
         udp)
@@ -81,10 +80,17 @@ set(PISUBMARINE_GSTREAMER_STATIC_PLUGIN_PACKAGES
         gstcoreelements
         gstautodetect
         gstvideoconvertscale
-        gstvideo4linux2
         gstopenh264
         gstrtp
         gstudp)
+
+if(WIN32)
+    list(APPEND PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES mediafoundation)
+    list(APPEND PISUBMARINE_GSTREAMER_STATIC_PLUGIN_PACKAGES gstmediafoundation)
+else()
+    list(APPEND PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES video4linux2)
+    list(APPEND PISUBMARINE_GSTREAMER_STATIC_PLUGIN_PACKAGES gstvideo4linux2)
+endif()
 
 function(_pisubmarine_collect_gstreamer_static_plugin plugin_basename result_variable)
     if(NOT GSTREAMER_STATIC_PLUGIN_DIR)
@@ -124,18 +130,17 @@ if(TARGET PkgConfig::GSTREAMER)
         message(STATUS "Failed to resolve GStreamer static plugin packages via pkg-config; falling back to dynamic plugin discovery")
     endif()
 else()
+    set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS TRUE)
     foreach(_plugin_basename IN LISTS PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES)
         _pisubmarine_collect_gstreamer_static_plugin("${_plugin_basename}" _plugin_library)
         if(_plugin_library)
             list(APPEND PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES "${_plugin_library}")
         else()
-            set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS FALSE)
             message(STATUS
                     "GStreamer static plugin archive '${_plugin_basename}' was not found in "
-                    "${GSTREAMER_STATIC_PLUGIN_DIR}; falling back to dynamic plugin discovery")
-            break()
+                    "${GSTREAMER_STATIC_PLUGIN_DIR}; skipping registration for this plugin")
+            continue()
         endif()
-        set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS TRUE)
     endforeach()
 
     if(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS)
