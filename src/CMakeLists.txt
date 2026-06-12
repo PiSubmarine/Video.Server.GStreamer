@@ -29,7 +29,6 @@ target_include_directories(${PISUBMARINE_MODULE_NAME}
 PiSubmarineInitTarget(${PISUBMARINE_MODULE_NAME})
 target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC spdlog::spdlog)
 if(TARGET PkgConfig::GSTREAMER)
-    target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE PkgConfig::GSTREAMER)
     pkg_get_variable(GSTREAMER_LIBRARY_DIR gstreamer-1.0 libdir)
 else()
     find_path(GSTREAMER_INCLUDE_DIR gst/gst.h PATH_SUFFIXES gstreamer-1.0)
@@ -52,10 +51,6 @@ else()
             ${GSTREAMER_INCLUDE_DIR}
             ${GLIB_INCLUDE_DIR}
             ${GLIB_CONFIG_INCLUDE_DIR})
-    target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE
-            ${GSTREAMER_LIBRARY}
-            ${GLIB_LIBRARY}
-            ${GOBJECT_LIBRARY})
     get_filename_component(GSTREAMER_LIBRARY_DIR "${GSTREAMER_LIBRARY}" DIRECTORY)
 endif()
 
@@ -125,11 +120,39 @@ endforeach()
 
 if(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS)
     message(STATUS "Linking GStreamer static plugins: ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES}")
-    target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES})
+    target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES})
 endif()
 
 target_compile_definitions(${PISUBMARINE_MODULE_NAME}
         PRIVATE PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS=$<BOOL:${PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS}>)
+
+if(TARGET PkgConfig::GSTREAMER)
+    if(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS)
+        pkg_check_modules(GSTREAMER_STATIC_PLUGIN_DEPS QUIET IMPORTED_TARGET
+                gstreamer-base-1.0
+                gstreamer-net-1.0
+                gio-2.0
+                gio-unix-2.0)
+        if(TARGET PkgConfig::GSTREAMER_STATIC_PLUGIN_DEPS)
+            target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE
+                    PkgConfig::GSTREAMER
+                    PkgConfig::GSTREAMER_STATIC_PLUGIN_DEPS)
+        else()
+            message(WARNING
+                    "Static GStreamer plugins were found, but the extra dependency set "
+                    "(gstreamer-base-1.0, gstreamer-net-1.0, gio-2.0, gio-unix-2.0) "
+                    "could not be resolved via pkg-config. The final link may fail.")
+            target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE PkgConfig::GSTREAMER)
+        endif()
+    else()
+        target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE PkgConfig::GSTREAMER)
+    endif()
+else()
+    target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE
+            ${GSTREAMER_LIBRARY}
+            ${GLIB_LIBRARY}
+            ${GOBJECT_LIBRARY})
+endif()
 
 PiSubmarineAddDependency("https://github.com/PiSubmarine/Control.Video.Api.git" "")
 target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Control.Video.Api)
