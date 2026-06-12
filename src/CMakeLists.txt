@@ -157,21 +157,33 @@ else()
 endif()
 
 if(WIN32)
+    set(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY_DIRS
+            "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/debug/lib"
+            "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib")
     set(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES "")
-    foreach(_windows_support_library_name
-            gmodule-2.0
-            intl
-            iconv
-            pcre2-8d
-            pcre2-8
-            ffi)
+    foreach(_windows_support_library_spec IN ITEMS
+            "gmodule-2.0:gmodule-2.0"
+            "intl:intl"
+            "iconv:iconv"
+            "pcre2-8:pcre2-8d;pcre2-8"
+            "ffi:ffi")
+        string(REPLACE ":" ";" _windows_support_library_parts "${_windows_support_library_spec}")
+        list(GET _windows_support_library_parts 0 _windows_support_library_label)
+        list(GET _windows_support_library_parts 1 _windows_support_library_name_list)
+        string(REPLACE ";" ";" _windows_support_library_name_list "${_windows_support_library_name_list}")
         unset(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY CACHE)
         find_library(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY
-                NAMES ${_windows_support_library_name})
-        if(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY)
-            list(APPEND PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES
-                    "${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY}")
+                NAMES ${_windows_support_library_name_list}
+                PATHS ${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY_DIRS}
+                NO_DEFAULT_PATH)
+        if(NOT PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY)
+            message(FATAL_ERROR
+                    "Failed to locate required Windows GStreamer support library "
+                    "'${_windows_support_library_label}' in: "
+                    "${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY_DIRS}")
         endif()
+        list(APPEND PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES
+                "${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY}")
     endforeach()
 
     list(REMOVE_DUPLICATES PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES)
