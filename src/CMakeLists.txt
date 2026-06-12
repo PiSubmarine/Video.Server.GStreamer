@@ -30,6 +30,7 @@ PiSubmarineInitTarget(${PISUBMARINE_MODULE_NAME})
 target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC spdlog::spdlog)
 if(TARGET PkgConfig::GSTREAMER)
     target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE PkgConfig::GSTREAMER)
+    pkg_get_variable(GSTREAMER_LIBRARY_DIR gstreamer-1.0 libdir)
 else()
     find_path(GSTREAMER_INCLUDE_DIR gst/gst.h PATH_SUFFIXES gstreamer-1.0)
     find_path(GLIB_INCLUDE_DIR glib.h PATH_SUFFIXES glib-2.0)
@@ -55,15 +56,15 @@ else()
             ${GSTREAMER_LIBRARY}
             ${GLIB_LIBRARY}
             ${GOBJECT_LIBRARY})
+    get_filename_component(GSTREAMER_LIBRARY_DIR "${GSTREAMER_LIBRARY}" DIRECTORY)
 endif()
 
 set(GSTREAMER_STATIC_PLUGIN_DIR "")
-if(TARGET PkgConfig::GSTREAMER)
-    pkg_get_variable(GSTREAMER_STATIC_PLUGIN_DIR gstreamer-1.0 pluginsdir)
+if(GSTREAMER_LIBRARY_DIR)
+    set(GSTREAMER_STATIC_PLUGIN_DIR "${GSTREAMER_LIBRARY_DIR}/gstreamer-1.0")
 endif()
 if(NOT GSTREAMER_STATIC_PLUGIN_DIR)
     set(_candidate_plugin_dirs
-            "${CMAKE_CURRENT_LIST_DIR}/../out/build/${CMAKE_BUILD_TYPE}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/gstreamer-1.0"
             "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/gstreamer-1.0")
     foreach(_candidate_plugin_dir IN LISTS _candidate_plugin_dirs)
         if(EXISTS "${_candidate_plugin_dir}")
@@ -86,6 +87,8 @@ function(_pisubmarine_link_gstreamer_static_plugin plugin_basename)
         target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE "${_plugin_library}")
     endif()
 endfunction()
+
+message(STATUS "GStreamer static plugin dir: ${GSTREAMER_STATIC_PLUGIN_DIR}")
 
 _pisubmarine_link_gstreamer_static_plugin("coreelements")
 _pisubmarine_link_gstreamer_static_plugin("autodetect")
