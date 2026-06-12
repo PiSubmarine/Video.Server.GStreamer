@@ -1,9 +1,11 @@
 #include "PiSubmarine/Video/Server/GStreamer/GstreamerPipeline.h"
 
+#include <algorithm>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <spdlog/spdlog.h>
 
@@ -15,6 +17,7 @@ namespace PiSubmarine::Video::Server::GStreamer
     {
         std::once_flag GstreamerInitFlag;
         std::once_flag GstreamerDebugFlag;
+        std::once_flag GstreamerRegistryDiagnosticsFlag;
         std::shared_ptr<spdlog::logger> GstreamerDebugLogger;
 
         [[nodiscard]] Error::Api::Error MakePipelineError()
@@ -92,6 +95,65 @@ namespace PiSubmarine::Video::Server::GStreamer
 
             return std::string(elementName);
         }
+
+        [[nodiscard]] std::vector<std::string> CollectMatchingFactories(const std::string_view needle)
+        {
+            std::vector<std::string> names;
+
+            auto* registry = gst_registry_get();
+            if (registry == nullptr)
+            {
+                return names;
+            }
+
+            GList* factories = gst_registry_get_feature_list(registry, GST_TYPE_ELEMENT_FACTORY);
+            for (GList* current = factories; current != nullptr; current = current->next)
+            {
+                auto* feature = GST_PLUGIN_FEATURE(current->data);
+                if (feature == nullptr)
+                {
+                    continue;
+                }
+
+                const auto* name = gst_plugin_feature_get_name(feature);
+                if (name == nullptr)
+                {
+                    continue;
+                }
+
+                const std::string factoryName(name);
+                if (factoryName.contains(needle))
+                {
+                    names.push_back(factoryName);
+                }
+            }
+
+            g_list_free_full(factories, reinterpret_cast<GDestroyNotify>(&gst_object_unref));
+            std::ranges::sort(names);
+            names.erase(std::unique(names.begin(), names.end()), names.end());
+            return names;
+        }
+
+        [[nodiscard]] std::string JoinNames(const std::vector<std::string>& names)
+        {
+            if (names.empty())
+            {
+                return "<none>";
+            }
+
+            std::string result;
+            for (std::size_t index = 0; index < names.size(); ++index)
+            {
+                if (index > 0)
+                {
+                    result += ", ";
+                }
+
+                result += names[index];
+            }
+
+            return result;
+        }
     }
 
     std::unique_ptr<IPipeline> CreateGstreamerPipeline(
@@ -121,6 +183,11 @@ namespace PiSubmarine::Video::Server::GStreamer
             GstreamerDebugLogger = m_Logger;
             gst_debug_add_log_function(&GstDebugLogCallback, nullptr, nullptr);
         });
+
+        std::call_once(GstreamerRegistryDiagnosticsFlag, [this]
+        {
+            LogRegistryDiagnostics(m_Logger);
+        });
     }
 
     GstreamerPipeline::~GstreamerPipeline()
@@ -144,7 +211,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         std::string description;
         try
         {
-            description = BuildPipelineDescription(state);
+            description = BuildPipelineDescription(state, m_Logger);
         }
         catch (const std::exception& exception)
         {
@@ -263,6 +330,36 @@ namespace PiSubmarine::Video::Server::GStreamer
         return initialized;
     }
 
+    void GstreamerPipeline::LogRegistryDiagnostics(const std::shared_ptr<spdlog::logger>& logger)
+    {
+        SPDLOG_LOGGER_INFO(
+            logger,
+            "GStreamer factory availability: libcamerasrc={}, v4l2src={}, mfvideosrc={}, ksvideosrc={}, autovideosrc={}, "
+            "x264enc={}, openh264enc={}, rtph264pay={}, multiudpsink={}",
+            HasFactory("libcamerasrc"),
+            HasFactory("v4l2src"),
+            HasFactory("mfvideosrc"),
+            HasFactory("ksvideosrc"),
+            HasFactory("autovideosrc"),
+            HasFactory("x264enc"),
+            HasFactory("openh264enc"),
+            HasFactory("rtph264pay"),
+            HasFactory("multiudpsink"));
+
+        SPDLOG_LOGGER_INFO(
+            logger,
+            "GStreamer factories containing '264': {}",
+            JoinNames(CollectMatchingFactories("264")));
+        SPDLOG_LOGGER_INFO(
+            logger,
+            "GStreamer factories containing 'enc': {}",
+            JoinNames(CollectMatchingFactories("enc")));
+        SPDLOG_LOGGER_INFO(
+            logger,
+            "GStreamer factories containing 'video': {}",
+            JoinNames(CollectMatchingFactories("video")));
+    }
+
     bool GstreamerPipeline::HasFactory(const char* name)
     {
         auto* factory = gst_element_factory_find(name);
@@ -275,8 +372,12 @@ namespace PiSubmarine::Video::Server::GStreamer
         return true;
     }
 
-    std::string GstreamerPipeline::BuildSourceDescription(const Source& source)
+    std::string GstreamerPipeline::BuildSourceDescription(
+        const Source& source,
+        const std::shared_ptr<spdlog::logger>& logger)
     {
+        static_cast<void>(logger);
+
         if (const auto* elementSource = std::get_if<ElementSource>(&source))
         {
             return elementSource->Description;
@@ -295,11 +396,19 @@ namespace PiSubmarine::Video::Server::GStreamer
             }
         }
 
-        throw std::runtime_error("No suitable GStreamer video source element was found");
+        throw std::runtime_error(
+            std::format(
+                "No suitable GStreamer video source element was found. Candidates: [{}]. Visible 'video' factories: {}",
+                JoinNames(candidates),
+                JoinNames(CollectMatchingFactories("video"))));
     }
 
-    std::string GstreamerPipeline::BuildEncoderDescription(const Control::Video::Api::StreamProfile profile)
+    std::string GstreamerPipeline::BuildEncoderDescription(
+        const Control::Video::Api::StreamProfile profile,
+        const std::shared_ptr<spdlog::logger>& logger)
     {
+        static_cast<void>(logger);
+
         const auto x264Description = [profile]() -> std::string
         {
             switch (profile)
@@ -340,10 +449,19 @@ namespace PiSubmarine::Video::Server::GStreamer
             return openH264Description();
         }
 
-        throw std::runtime_error("No suitable GStreamer H.264 encoder element was found");
+        throw std::runtime_error(
+            std::format(
+                "No suitable GStreamer H.264 encoder element was found. x264enc={}, openh264enc={}. Visible '264' "
+                "factories: {}. Visible 'enc' factories: {}",
+                HasFactory("x264enc"),
+                HasFactory("openh264enc"),
+                JoinNames(CollectMatchingFactories("264")),
+                JoinNames(CollectMatchingFactories("enc"))));
     }
 
-    std::string GstreamerPipeline::BuildPipelineDescription(const PipelineState& state)
+    std::string GstreamerPipeline::BuildPipelineDescription(
+        const PipelineState& state,
+        const std::shared_ptr<spdlog::logger>& logger)
     {
         const auto* enabledState = state.Command.TryGetEnabled();
         if (enabledState == nullptr)
@@ -354,8 +472,8 @@ namespace PiSubmarine::Video::Server::GStreamer
         return std::format(
             "{} ! queue leaky=downstream max-size-buffers=1 ! videoconvert ! {} ! rtph264pay pt=96 config-interval=1 ! "
             "multiudpsink name=subscription_sink sync=false async=false",
-            BuildSourceDescription(state.Configuration.VideoSource),
-            BuildEncoderDescription(enabledState->Profile));
+            BuildSourceDescription(state.Configuration.VideoSource, logger),
+            BuildEncoderDescription(enabledState->Profile, logger));
     }
 
     void GstreamerPipeline::ApplyEndpoints(const std::vector<Subscription::Api::Endpoint>& endpoints)

@@ -36,10 +36,17 @@ namespace PiSubmarine::Video::Server::GStreamer
         using GstElementPtr = std::unique_ptr<GstElement, GstElementDeleter>;
 
         [[nodiscard]] static bool InitializeGstreamer();
+        static void LogRegistryDiagnostics(const std::shared_ptr<spdlog::logger>& logger);
         [[nodiscard]] static bool HasFactory(const char* name);
-        [[nodiscard]] static std::string BuildSourceDescription(const Source& source);
-        [[nodiscard]] static std::string BuildEncoderDescription(Control::Video::Api::StreamProfile profile);
-        [[nodiscard]] static std::string BuildPipelineDescription(const PipelineState& state);
+        [[nodiscard]] static std::string BuildSourceDescription(
+            const Source& source,
+            const std::shared_ptr<spdlog::logger>& logger);
+        [[nodiscard]] static std::string BuildEncoderDescription(
+            Control::Video::Api::StreamProfile profile,
+            const std::shared_ptr<spdlog::logger>& logger);
+        [[nodiscard]] static std::string BuildPipelineDescription(
+            const PipelineState& state,
+            const std::shared_ptr<spdlog::logger>& logger);
         void ApplyEndpoints(const std::vector<Subscription::Api::Endpoint>& endpoints);
         void DrainBusMessages();
 
