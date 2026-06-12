@@ -77,6 +77,14 @@ set(PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES
         openh264
         rtp
         udp)
+set(PISUBMARINE_GSTREAMER_STATIC_PLUGIN_PACKAGES
+        gstcoreelements
+        gstautodetect
+        gstvideoconvertscale
+        gstvideo4linux2
+        gstopenh264
+        gstrtp
+        gstudp)
 
 function(_pisubmarine_collect_gstreamer_static_plugin plugin_basename result_variable)
     if(NOT GSTREAMER_STATIC_PLUGIN_DIR)
@@ -104,49 +112,43 @@ endfunction()
 message(STATUS "GStreamer static plugin dir: ${GSTREAMER_STATIC_PLUGIN_DIR}")
 
 set(PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES "")
-set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS TRUE)
-foreach(_plugin_basename IN LISTS PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES)
-    _pisubmarine_collect_gstreamer_static_plugin("${_plugin_basename}" _plugin_library)
-    if(_plugin_library)
-        list(APPEND PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES "${_plugin_library}")
+set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS FALSE)
+if(TARGET PkgConfig::GSTREAMER)
+    pkg_check_modules(GSTREAMER_STATIC_PLUGINS QUIET IMPORTED_TARGET
+            ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_PACKAGES})
+    if(TARGET PkgConfig::GSTREAMER_STATIC_PLUGINS)
+        set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS TRUE)
+        message(STATUS "Linking GStreamer static plugins via pkg-config packages: ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_PACKAGES}")
+        target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE PkgConfig::GSTREAMER_STATIC_PLUGINS)
     else()
-        set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS FALSE)
-        message(STATUS
-                "GStreamer static plugin archive '${_plugin_basename}' was not found in "
-                "${GSTREAMER_STATIC_PLUGIN_DIR}; falling back to dynamic plugin discovery")
-        break()
+        message(STATUS "Failed to resolve GStreamer static plugin packages via pkg-config; falling back to dynamic plugin discovery")
     endif()
-endforeach()
+else()
+    foreach(_plugin_basename IN LISTS PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES)
+        _pisubmarine_collect_gstreamer_static_plugin("${_plugin_basename}" _plugin_library)
+        if(_plugin_library)
+            list(APPEND PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES "${_plugin_library}")
+        else()
+            set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS FALSE)
+            message(STATUS
+                    "GStreamer static plugin archive '${_plugin_basename}' was not found in "
+                    "${GSTREAMER_STATIC_PLUGIN_DIR}; falling back to dynamic plugin discovery")
+            break()
+        endif()
+        set(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS TRUE)
+    endforeach()
 
-if(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS)
-    message(STATUS "Linking GStreamer static plugins: ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES}")
-    target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES})
+    if(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS)
+        message(STATUS "Linking GStreamer static plugins: ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES}")
+        target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE ${PISUBMARINE_GSTREAMER_STATIC_PLUGIN_LIBRARIES})
+    endif()
 endif()
 
 target_compile_definitions(${PISUBMARINE_MODULE_NAME}
         PRIVATE PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS=$<BOOL:${PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS}>)
 
 if(TARGET PkgConfig::GSTREAMER)
-    if(PISUBMARINE_GSTREAMER_HAS_STATIC_PLUGINS)
-        pkg_check_modules(GSTREAMER_STATIC_PLUGIN_DEPS QUIET IMPORTED_TARGET
-                gstreamer-base-1.0
-                gstreamer-net-1.0
-                gio-2.0
-                gio-unix-2.0)
-        if(TARGET PkgConfig::GSTREAMER_STATIC_PLUGIN_DEPS)
-            target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE
-                    PkgConfig::GSTREAMER
-                    PkgConfig::GSTREAMER_STATIC_PLUGIN_DEPS)
-        else()
-            message(WARNING
-                    "Static GStreamer plugins were found, but the extra dependency set "
-                    "(gstreamer-base-1.0, gstreamer-net-1.0, gio-2.0, gio-unix-2.0) "
-                    "could not be resolved via pkg-config. The final link may fail.")
-            target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE PkgConfig::GSTREAMER)
-        endif()
-    else()
-        target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE PkgConfig::GSTREAMER)
-    endif()
+    target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE PkgConfig::GSTREAMER)
 else()
     target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE
             ${GSTREAMER_LIBRARY}
