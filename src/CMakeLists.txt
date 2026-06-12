@@ -38,7 +38,11 @@ else()
 
     if(NOT GSTREAMER_INCLUDE_DIR OR NOT GLIB_INCLUDE_DIR OR NOT GLIB_CONFIG_INCLUDE_DIR OR
             NOT GSTREAMER_LIBRARY OR NOT GLIB_LIBRARY OR NOT GOBJECT_LIBRARY)
-        message(FATAL_ERROR "Failed to locate GStreamer development files")
+        message(FATAL_ERROR
+                "Failed to locate GStreamer development files. "
+                "Install GStreamer development packages such as "
+                "'libgstreamer1.0-dev' and 'libgstreamer-plugins-base1.0-dev', "
+                "or provide discovery hints through PKG_CONFIG_PATH / CMAKE_PREFIX_PATH.")
     endif()
 
     target_include_directories(${PISUBMARINE_MODULE_NAME} PRIVATE

@@ -132,7 +132,7 @@ namespace PiSubmarine::Video::Server::GStreamer
     {
         if (m_LastState.has_value() &&
             m_Pipeline &&
-            (m_LastState->Config != state.Config || m_LastState->Command != state.Command))
+            (m_LastState->Configuration != state.Configuration || m_LastState->Command != state.Command))
         {
             const auto stopResult = Stop();
             if (!stopResult.has_value())
@@ -354,7 +354,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         return std::format(
             "{} ! queue leaky=downstream max-size-buffers=1 ! videoconvert ! {} ! rtph264pay pt=96 config-interval=1 ! "
             "multiudpsink name=subscription_sink sync=false async=false",
-            BuildSourceDescription(state.Config.VideoSource),
+            BuildSourceDescription(state.Configuration.VideoSource),
             BuildEncoderDescription(enabledState->Profile));
     }
 

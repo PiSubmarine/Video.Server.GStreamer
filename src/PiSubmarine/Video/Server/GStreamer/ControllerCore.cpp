@@ -79,15 +79,15 @@ namespace PiSubmarine::Video::Server::GStreamer
 
         m_Subscribers[request.LeaseId.Value] = Subscriber{
             .LeaseId = request.LeaseId,
-            .Endpoint = request.Endpoint};
+            .Endpoint = request.ClientEndpoint};
         m_IsDirty = true;
 
         SPDLOG_LOGGER_INFO(
             m_Logger,
             "Registered video subscriber for lease '{}' at '{}:{}'",
             request.LeaseId.Value,
-            request.Endpoint.Host,
-            request.Endpoint.Port);
+            request.ClientEndpoint.Host,
+            request.ClientEndpoint.Port);
         return {};
     }
 
@@ -186,7 +186,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         }
 
         const PipelineState state{
-            .Config = m_Config,
+            .Configuration = m_Config,
             .Command = m_Target,
             .Endpoints = CollectEndpoints()};
 

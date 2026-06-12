@@ -4,6 +4,8 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <PiSubmarine/Video/Subscription/Api/SubscribeRequest.h>
+#include <PiSubmarine/Video/Subscription/Api/UnsubscribeRequest.h>
 
 #include "PiSubmarine/Lease/Api/ILeaseValidator.h"
 #include "PiSubmarine/Lease/Api/IResourceRegistry.h"

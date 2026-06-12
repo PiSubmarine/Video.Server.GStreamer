@@ -13,7 +13,7 @@ namespace PiSubmarine::Video::Server::GStreamer
 {
     struct PipelineState
     {
-        Config Config;
+        Config Configuration;
         Control::Video::Api::Command Command;
         std::vector<Subscription::Api::Endpoint> Endpoints;
 
