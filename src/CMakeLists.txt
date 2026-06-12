@@ -156,6 +156,29 @@ else()
             ${GOBJECT_LIBRARY})
 endif()
 
+if(WIN32)
+    set(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES "")
+    foreach(_windows_support_library_name
+            gmodule-2.0
+            intl
+            iconv
+            pcre2-8d
+            pcre2-8
+            ffi)
+        unset(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY CACHE)
+        find_library(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY
+                NAMES ${_windows_support_library_name})
+        if(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY)
+            list(APPEND PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES
+                    "${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY}")
+        endif()
+    endforeach()
+
+    list(REMOVE_DUPLICATES PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES)
+    target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC
+            ${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES})
+endif()
+
 PiSubmarineAddDependency("https://github.com/PiSubmarine/Control.Video.Api.git" "")
 target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Control.Video.Api)
 
