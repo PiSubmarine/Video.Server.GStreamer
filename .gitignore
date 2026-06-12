@@ -1,0 +1,17 @@
+.idea
+/cmake-build-debug
+/cmake-build-release
+/out
+
+*.user
+*.VC.db
+*.VC.opendb
+*.sln.docstates
+
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.exe
