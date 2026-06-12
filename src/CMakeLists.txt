@@ -76,6 +76,7 @@ endif()
 
 function(_pisubmarine_link_gstreamer_static_plugin plugin_basename)
     if(NOT GSTREAMER_STATIC_PLUGIN_DIR)
+        message(STATUS "Skipping GStreamer static plugin '${plugin_basename}' because plugin dir is empty")
         return()
     endif()
 
@@ -84,7 +85,10 @@ function(_pisubmarine_link_gstreamer_static_plugin plugin_basename)
             PATHS "${GSTREAMER_STATIC_PLUGIN_DIR}"
             NO_DEFAULT_PATH)
     if(_plugin_library)
-        target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE "${_plugin_library}")
+        message(STATUS "Linking GStreamer static plugin '${plugin_basename}' from ${_plugin_library}")
+        target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC "${_plugin_library}")
+    else()
+        message(STATUS "Failed to locate GStreamer static plugin '${plugin_basename}' in ${GSTREAMER_STATIC_PLUGIN_DIR}")
     endif()
 endfunction()
 
