@@ -35,7 +35,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         using GstObjectPtr = std::unique_ptr<GstObject, GstObjectDeleter>;
         using GstElementPtr = std::unique_ptr<GstElement, GstElementDeleter>;
 
-        [[nodiscard]] static bool InitializeGstreamer();
+        [[nodiscard]] static bool InitializeGstreamer(const std::shared_ptr<spdlog::logger>& logger);
         static void LogRegistryDiagnostics(const std::shared_ptr<spdlog::logger>& logger);
         [[nodiscard]] static bool HasFactory(const char* name);
         [[nodiscard]] static std::string BuildSourceDescription(

@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 
 #include "PiSubmarine/Error/Api/MakeError.h"
+#include "PiSubmarine/Video/Server/GStreamer/StaticPluginRegistration.h"
 
 namespace PiSubmarine::Video::Server::GStreamer
 {
@@ -173,7 +174,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         : m_Config(std::move(config))
         , m_Logger(std::move(logger))
     {
-        if (!InitializeGstreamer())
+        if (!InitializeGstreamer(m_Logger))
         {
             throw std::runtime_error("Failed to initialize GStreamer");
         }
@@ -314,17 +315,20 @@ namespace PiSubmarine::Video::Server::GStreamer
         }
     }
 
-    bool GstreamerPipeline::InitializeGstreamer()
+    bool GstreamerPipeline::InitializeGstreamer(const std::shared_ptr<spdlog::logger>& logger)
     {
         bool initialized = true;
-        std::call_once(GstreamerInitFlag, [&initialized]
+        std::call_once(GstreamerInitFlag, [&initialized, &logger]
         {
             GError* error = nullptr;
             initialized = gst_init_check(nullptr, nullptr, &error);
             if (!initialized && error != nullptr)
             {
                 g_error_free(error);
+                return;
             }
+
+            RegisterStaticPlugins(logger);
         });
 
         return initialized;

@@ -15,12 +15,14 @@ add_library(${PISUBMARINE_MODULE_NAME}
         PiSubmarine/Video/Server/GStreamer/Controller.cpp
         PiSubmarine/Video/Server/GStreamer/ControllerCore.cpp
         PiSubmarine/Video/Server/GStreamer/GstreamerPipeline.cpp
+        PiSubmarine/Video/Server/GStreamer/StaticPluginRegistration.cpp
         "../public/PiSubmarine/Video/Server/GStreamer/Config.h"
         "../public/PiSubmarine/Video/Server/GStreamer/Controller.h"
         "../public/PiSubmarine/Video/Server/GStreamer/Source.h"
         "PiSubmarine/Video/Server/GStreamer/ControllerCore.h"
         "PiSubmarine/Video/Server/GStreamer/Pipeline.h"
-        "PiSubmarine/Video/Server/GStreamer/GstreamerPipeline.h")
+        "PiSubmarine/Video/Server/GStreamer/GstreamerPipeline.h"
+        "PiSubmarine/Video/Server/GStreamer/StaticPluginRegistration.h")
 target_include_directories(${PISUBMARINE_MODULE_NAME}
         PUBLIC "../public"
         PRIVATE "./")
@@ -54,6 +56,44 @@ else()
             ${GLIB_LIBRARY}
             ${GOBJECT_LIBRARY})
 endif()
+
+set(GSTREAMER_STATIC_PLUGIN_DIR "")
+if(TARGET PkgConfig::GSTREAMER)
+    pkg_get_variable(GSTREAMER_STATIC_PLUGIN_DIR gstreamer-1.0 pluginsdir)
+endif()
+if(NOT GSTREAMER_STATIC_PLUGIN_DIR)
+    set(_candidate_plugin_dirs
+            "${CMAKE_CURRENT_LIST_DIR}/../out/build/${CMAKE_BUILD_TYPE}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/gstreamer-1.0"
+            "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/gstreamer-1.0")
+    foreach(_candidate_plugin_dir IN LISTS _candidate_plugin_dirs)
+        if(EXISTS "${_candidate_plugin_dir}")
+            set(GSTREAMER_STATIC_PLUGIN_DIR "${_candidate_plugin_dir}")
+            break()
+        endif()
+    endforeach()
+endif()
+
+function(_pisubmarine_link_gstreamer_static_plugin plugin_basename)
+    if(NOT GSTREAMER_STATIC_PLUGIN_DIR)
+        return()
+    endif()
+
+    find_library(_plugin_library
+            NAMES "gst${plugin_basename}" "libgst${plugin_basename}"
+            PATHS "${GSTREAMER_STATIC_PLUGIN_DIR}"
+            NO_DEFAULT_PATH)
+    if(_plugin_library)
+        target_link_libraries(${PISUBMARINE_MODULE_NAME} PRIVATE "${_plugin_library}")
+    endif()
+endfunction()
+
+_pisubmarine_link_gstreamer_static_plugin("coreelements")
+_pisubmarine_link_gstreamer_static_plugin("autodetect")
+_pisubmarine_link_gstreamer_static_plugin("videoconvertscale")
+_pisubmarine_link_gstreamer_static_plugin("video4linux2")
+_pisubmarine_link_gstreamer_static_plugin("openh264")
+_pisubmarine_link_gstreamer_static_plugin("rtp")
+_pisubmarine_link_gstreamer_static_plugin("udp")
 
 PiSubmarineAddDependency("https://github.com/PiSubmarine/Control.Video.Api.git" "")
 target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Control.Video.Api)
