@@ -166,6 +166,54 @@ if(WIN32)
             "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/debug/lib"
             "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib")
     set(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES "")
+    macro(_pisubmarine_append_windows_library result_variable library_label)
+        set(options)
+        set(oneValueArgs)
+        set(multiValueArgs NAMES)
+        cmake_parse_arguments(PARSE_ARGV 2 WINDOWS_LIBRARY "${options}" "${oneValueArgs}" "${multiValueArgs}")
+        if(NOT WINDOWS_LIBRARY_NAMES)
+            message(FATAL_ERROR "No library names were provided for '${library_label}'")
+        endif()
+
+        unset(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY CACHE)
+        find_library(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY
+                NAMES ${WINDOWS_LIBRARY_NAMES}
+                PATHS ${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY_DIRS}
+                NO_DEFAULT_PATH)
+        if(NOT PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY)
+            message(FATAL_ERROR
+                    "Failed to locate required Windows GStreamer support library "
+                    "'${library_label}' in: "
+                    "${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY_DIRS}")
+        endif()
+
+        list(APPEND ${result_variable}
+                "${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY}")
+    endmacro()
+
+    foreach(_windows_gstreamer_library_spec IN ITEMS
+            "gstbase-1.0:gstbase-1.0"
+            "gstvideo-1.0:gstvideo-1.0"
+            "gstrtp-1.0:gstrtp-1.0"
+            "gstaudio-1.0:gstaudio-1.0"
+            "gsttag-1.0:gsttag-1.0"
+            "gstpbutils-1.0:gstpbutils-1.0"
+            "gstnet-1.0:gstnet-1.0"
+            "gstd3d11-1.0:gstd3d11-1.0"
+            "gstd3dshader-1.0:gstd3dshader-1.0"
+            "gstwinrt-1.0:gstwinrt-1.0"
+            "gio-2.0:gio-2.0"
+            "openh264:openh264")
+        string(REPLACE ":" ";" _windows_gstreamer_library_parts "${_windows_gstreamer_library_spec}")
+        list(GET _windows_gstreamer_library_parts 0 _windows_gstreamer_library_label)
+        list(GET _windows_gstreamer_library_parts 1 _windows_gstreamer_library_name_list)
+        string(REPLACE ";" ";" _windows_gstreamer_library_name_list "${_windows_gstreamer_library_name_list}")
+        _pisubmarine_append_windows_library(
+                PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES
+                "${_windows_gstreamer_library_label}"
+                NAMES ${_windows_gstreamer_library_name_list})
+    endforeach()
+
     foreach(_windows_support_library_spec IN ITEMS
             "gmodule-2.0:gmodule-2.0"
             "intl:intl"
@@ -176,24 +224,29 @@ if(WIN32)
         list(GET _windows_support_library_parts 0 _windows_support_library_label)
         list(GET _windows_support_library_parts 1 _windows_support_library_name_list)
         string(REPLACE ";" ";" _windows_support_library_name_list "${_windows_support_library_name_list}")
-        unset(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY CACHE)
-        find_library(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY
-                NAMES ${_windows_support_library_name_list}
-                PATHS ${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY_DIRS}
-                NO_DEFAULT_PATH)
-        if(NOT PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY)
-            message(FATAL_ERROR
-                    "Failed to locate required Windows GStreamer support library "
-                    "'${_windows_support_library_label}' in: "
-                    "${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY_DIRS}")
-        endif()
-        list(APPEND PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES
-                "${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY}")
+        _pisubmarine_append_windows_library(
+                PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES
+                "${_windows_support_library_label}"
+                NAMES ${_windows_support_library_name_list})
     endforeach()
 
     list(REMOVE_DUPLICATES PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES)
     target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC
-            ${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES})
+            ${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES}
+            ws2_32
+            winmm
+            shlwapi
+            dnsapi
+            iphlpapi
+            mf
+            mfplat
+            mfreadwrite
+            mfuuid
+            strmiids
+            ole32
+            runtimeobject
+            d3d11
+            dxgi)
 endif()
 
 PiSubmarineAddDependency("https://github.com/PiSubmarine/Control.Video.Api.git" "")
