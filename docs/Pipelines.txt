@@ -1,0 +1,22 @@
+Windows:
+	Capture:
+	gst-launch-1.0 -v ^
+	  mfvideosrc ^
+	  ! video/x-raw,width=1280,height=720,framerate=30/1 ^
+	  ! queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ^
+	  ! videoconvert ^
+	  ! video/x-raw,format=NV12 ^
+	  ! mfh264enc low-latency=true bitrate=1000 ^
+	  ! h264parse config-interval=-1 ^
+	  ! rtph264pay pt=96 config-interval=-1 aggregate-mode=none ^
+	  ! udpsink host=127.0.0.1 port=5004 sync=false async=false
+	  
+	 Playback:
+	 gst-launch-1.0 -v ^
+	  udpsrc port=5004 caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000" ^
+	  ! rtpjitterbuffer latency=0 drop-on-latency=true ^
+	  ! rtph264depay ^
+	  ! h264parse ^
+	  ! avdec_h264 max-threads=1 ^
+	  ! videoconvert ^
+	  ! autovideosink sync=false
