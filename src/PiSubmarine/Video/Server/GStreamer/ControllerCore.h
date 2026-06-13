@@ -11,6 +11,7 @@
 #include "PiSubmarine/Lease/Api/IResourceRegistry.h"
 #include "PiSubmarine/Logging/Api/IFactory.h"
 #include "PiSubmarine/Video/Server/GStreamer/Pipeline.h"
+#include "PiSubmarine/Video/Telemetry/Api/Status.h"
 
 namespace PiSubmarine::Video::Server::GStreamer
 {
@@ -25,6 +26,7 @@ namespace PiSubmarine::Video::Server::GStreamer
             std::unique_ptr<IPipeline> pipeline);
 
         [[nodiscard]] Error::Api::Result<void> SetTarget(const Control::Video::Api::Command& target);
+        [[nodiscard]] Error::Api::Result<::PiSubmarine::Video::Telemetry::Api::Status> GetStatus() const;
         [[nodiscard]] Error::Api::Result<void> Subscribe(const Subscription::Api::SubscribeRequest& request);
         [[nodiscard]] Error::Api::Result<void> Unsubscribe(const Subscription::Api::UnsubscribeRequest& request);
         void Tick(const std::chrono::nanoseconds& uptime, const std::chrono::nanoseconds& deltaTime);

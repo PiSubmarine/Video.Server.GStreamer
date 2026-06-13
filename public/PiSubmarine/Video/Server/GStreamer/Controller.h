@@ -9,12 +9,14 @@
 #include "PiSubmarine/Logging/Api/IFactory.h"
 #include "PiSubmarine/Time/ITickable.h"
 #include "PiSubmarine/Video/Server/GStreamer/Config.h"
+#include "PiSubmarine/Video/Telemetry/Api/IProvider.h"
 #include "PiSubmarine/Video/Subscription/Api/IService.h"
 
 namespace PiSubmarine::Video::Server::GStreamer
 {
     class Controller final
         : public Control::Video::Api::IController
+        , public ::PiSubmarine::Video::Telemetry::Api::IProvider
         , public ::PiSubmarine::Video::Subscription::Api::IService
         , public Time::ITickable
     {
@@ -27,6 +29,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         ~Controller() override;
 
         [[nodiscard]] Error::Api::Result<void> SetTarget(const Control::Video::Api::Command& target) override;
+        [[nodiscard]] Error::Api::Result<::PiSubmarine::Video::Telemetry::Api::Status> GetStatus() const override;
         [[nodiscard]] Error::Api::Result<void> Subscribe(
             const ::PiSubmarine::Video::Subscription::Api::SubscribeRequest& request) override;
         [[nodiscard]] Error::Api::Result<void> Unsubscribe(

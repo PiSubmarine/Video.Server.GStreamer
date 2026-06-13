@@ -13,6 +13,11 @@ namespace PiSubmarine::Video::Server::GStreamer
 {
     namespace
     {
+        [[nodiscard]] bool HasAnyFaults(const ::PiSubmarine::Video::Telemetry::Api::Faults faults)
+        {
+            return static_cast<uint32_t>(faults) != 0;
+        }
+
         constexpr std::chrono::milliseconds LeaseDuration{3000};
         constexpr std::chrono::milliseconds RetryInterval{1000};
 
@@ -68,6 +73,27 @@ namespace PiSubmarine::Video::Server::GStreamer
         m_Target = target;
         m_IsDirty = true;
         return {};
+    }
+
+    Error::Api::Result<::PiSubmarine::Video::Telemetry::Api::Status> ControllerCore::GetStatus() const
+    {
+        const auto faults = m_Pipeline->GetFaults();
+
+        auto operational = ::PiSubmarine::Video::Telemetry::Api::OperationalState::Stopped;
+        if (HasAnyFaults(faults))
+        {
+            operational = ::PiSubmarine::Video::Telemetry::Api::OperationalState::Faulted;
+        }
+        else if (m_Pipeline->IsRunning())
+        {
+            operational = ::PiSubmarine::Video::Telemetry::Api::OperationalState::Streaming;
+        }
+
+        return ::PiSubmarine::Video::Telemetry::Api::Status{
+            .IsStreamingEnabled = m_Target.IsEnabled(),
+            .Subscribers = static_cast<int>(m_Subscribers.size()),
+            .Operational = operational,
+            .ActiveFaults = faults};
     }
 
     Error::Api::Result<void> ControllerCore::Subscribe(const Subscription::Api::SubscribeRequest& request)
@@ -190,7 +216,7 @@ namespace PiSubmarine::Video::Server::GStreamer
             .Command = m_Target,
             .Endpoints = CollectEndpoints()};
 
-        if (!m_IsDirty && m_LastAppliedState.has_value() && *m_LastAppliedState == state)
+        if (!m_IsDirty && m_LastAppliedState.has_value() && *m_LastAppliedState == state && m_Pipeline->IsRunning())
         {
             return;
         }

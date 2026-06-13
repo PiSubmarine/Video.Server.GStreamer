@@ -16,6 +16,11 @@ namespace PiSubmarine::Video::Server::GStreamer
 {
     namespace
     {
+        [[nodiscard]] constexpr ::PiSubmarine::Video::Telemetry::Api::Faults NoVideoFaults()
+        {
+            return static_cast<::PiSubmarine::Video::Telemetry::Api::Faults>(0);
+        }
+
         std::once_flag GstreamerInitFlag;
         std::once_flag GstreamerDebugFlag;
         std::once_flag GstreamerRegistryDiagnosticsFlag;
@@ -229,6 +234,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         catch (const std::exception& exception)
         {
             SPDLOG_LOGGER_ERROR(m_Logger, "Failed to prepare GStreamer pipeline description: {}", exception.what());
+            SetFault(ClassifyApplyFailure(exception.what()));
             return std::unexpected(MakePipelineError());
         }
 
@@ -240,6 +246,7 @@ namespace PiSubmarine::Video::Server::GStreamer
             if (error != nullptr)
             {
                 SPDLOG_LOGGER_ERROR(m_Logger, "Failed to create GStreamer pipeline: {}", error->message);
+                SetFault(ClassifyApplyFailure(error->message != nullptr ? error->message : description));
                 g_error_free(error);
                 if (pipeline != nullptr)
                 {
@@ -251,6 +258,7 @@ namespace PiSubmarine::Video::Server::GStreamer
 
             if (!pipeline)
             {
+                SetFault(ClassifyApplyFailure(description));
                 return std::unexpected(MakePipelineError());
             }
 
@@ -259,6 +267,7 @@ namespace PiSubmarine::Video::Server::GStreamer
             if (!m_MultiSink)
             {
                 SPDLOG_LOGGER_ERROR(m_Logger, "Failed to find multiudpsink in GStreamer pipeline");
+                SetFault(::PiSubmarine::Video::Telemetry::Api::Faults::NetworkError);
                 m_Pipeline.reset();
                 return std::unexpected(MakePipelineError());
             }
@@ -268,11 +277,13 @@ namespace PiSubmarine::Video::Server::GStreamer
             if (gst_element_set_state(m_Pipeline.get(), GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE)
             {
                 SPDLOG_LOGGER_ERROR(m_Logger, "Failed to start GStreamer pipeline");
+                SetFault(ClassifyApplyFailure(description));
                 m_MultiSink = nullptr;
                 m_Pipeline.reset();
                 return std::unexpected(MakePipelineError());
             }
 
+            ClearFaults();
             m_LastState = state;
             SPDLOG_LOGGER_INFO(m_Logger, "Started GStreamer video pipeline");
             return {};
@@ -283,6 +294,7 @@ namespace PiSubmarine::Video::Server::GStreamer
             ApplyEndpoints(state.Endpoints);
         }
 
+        ClearFaults();
         m_LastState = state;
         return {};
     }
@@ -316,6 +328,11 @@ namespace PiSubmarine::Video::Server::GStreamer
     bool GstreamerPipeline::IsRunning() const noexcept
     {
         return static_cast<bool>(m_Pipeline);
+    }
+
+    ::PiSubmarine::Video::Telemetry::Api::Faults GstreamerPipeline::GetFaults() const noexcept
+    {
+        return m_ActiveFaults;
     }
 
     void GstreamerPipeline::GstObjectDeleter::operator()(GstObject* object) const noexcept
@@ -609,6 +626,8 @@ namespace PiSubmarine::Video::Server::GStreamer
                     "GStreamer pipeline error: {} ({})",
                     error != nullptr ? error->message : "unknown",
                     debug != nullptr ? debug : "no debug info");
+                SetFault(ClassifyBusError(error));
+                static_cast<void>(Stop());
                 if (error != nullptr)
                 {
                     g_error_free(error);
@@ -671,5 +690,48 @@ namespace PiSubmarine::Video::Server::GStreamer
 
             gst_message_unref(message);
         }
+    }
+
+    void GstreamerPipeline::SetFault(const ::PiSubmarine::Video::Telemetry::Api::Faults fault) noexcept
+    {
+        m_ActiveFaults = static_cast<::PiSubmarine::Video::Telemetry::Api::Faults>(
+            static_cast<uint32_t>(m_ActiveFaults) | static_cast<uint32_t>(fault));
+    }
+
+    void GstreamerPipeline::ClearFaults() noexcept
+    {
+        m_ActiveFaults = NoVideoFaults();
+    }
+
+    ::PiSubmarine::Video::Telemetry::Api::Faults GstreamerPipeline::ClassifyApplyFailure(
+        const std::string_view diagnostic) const noexcept
+    {
+        if (diagnostic.contains("source") || diagnostic.contains("camera") || diagnostic.contains("device"))
+        {
+            return ::PiSubmarine::Video::Telemetry::Api::Faults::SourceError;
+        }
+
+        return ::PiSubmarine::Video::Telemetry::Api::Faults::ConfigError;
+    }
+
+    ::PiSubmarine::Video::Telemetry::Api::Faults GstreamerPipeline::ClassifyBusError(const GError* error) noexcept
+    {
+        if (error == nullptr || error->message == nullptr)
+        {
+            return ::PiSubmarine::Video::Telemetry::Api::Faults::ConfigError;
+        }
+
+        const std::string_view message(error->message);
+        if (message.contains("udp") || message.contains("UDP") || message.contains("network"))
+        {
+            return ::PiSubmarine::Video::Telemetry::Api::Faults::NetworkError;
+        }
+
+        if (message.contains("source") || message.contains("device") || message.contains("camera"))
+        {
+            return ::PiSubmarine::Video::Telemetry::Api::Faults::SourceError;
+        }
+
+        return ::PiSubmarine::Video::Telemetry::Api::Faults::ConfigError;
     }
 }

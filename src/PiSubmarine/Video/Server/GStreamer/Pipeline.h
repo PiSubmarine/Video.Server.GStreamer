@@ -7,6 +7,7 @@
 #include "PiSubmarine/Error/Api/Result.h"
 #include "PiSubmarine/Logging/Api/IFactory.h"
 #include "PiSubmarine/Video/Server/GStreamer/Config.h"
+#include "PiSubmarine/Video/Telemetry/Api/Faults.h"
 #include "PiSubmarine/Video/Subscription/Api/Endpoint.h"
 
 namespace PiSubmarine::Video::Server::GStreamer
@@ -29,6 +30,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         [[nodiscard]] virtual Error::Api::Result<void> Stop() = 0;
         virtual void PollBus() = 0;
         [[nodiscard]] virtual bool IsRunning() const noexcept = 0;
+        [[nodiscard]] virtual ::PiSubmarine::Video::Telemetry::Api::Faults GetFaults() const noexcept = 0;
     };
 
     [[nodiscard]] std::unique_ptr<IPipeline> CreateGstreamerPipeline(

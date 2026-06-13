@@ -20,6 +20,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         [[nodiscard]] Error::Api::Result<void> Stop() override;
         void PollBus() override;
         [[nodiscard]] bool IsRunning() const noexcept override;
+        [[nodiscard]] ::PiSubmarine::Video::Telemetry::Api::Faults GetFaults() const noexcept override;
 
     private:
         struct GstObjectDeleter
@@ -51,6 +52,10 @@ namespace PiSubmarine::Video::Server::GStreamer
             const std::shared_ptr<spdlog::logger>& logger);
         void ApplyEndpoints(const std::vector<Subscription::Api::Endpoint>& endpoints);
         void DrainBusMessages();
+        void SetFault(::PiSubmarine::Video::Telemetry::Api::Faults fault) noexcept;
+        void ClearFaults() noexcept;
+        [[nodiscard]] ::PiSubmarine::Video::Telemetry::Api::Faults ClassifyApplyFailure(const std::string_view diagnostic) const noexcept;
+        [[nodiscard]] static ::PiSubmarine::Video::Telemetry::Api::Faults ClassifyBusError(const GError* error) noexcept;
 
         Config m_Config;
         std::shared_ptr<spdlog::logger> m_Logger;
@@ -58,5 +63,6 @@ namespace PiSubmarine::Video::Server::GStreamer
         GstElement* m_MultiSink = nullptr;
         std::vector<Subscription::Api::Endpoint> m_Endpoints;
         std::optional<PipelineState> m_LastState;
+        ::PiSubmarine::Video::Telemetry::Api::Faults m_ActiveFaults{};
     };
 }

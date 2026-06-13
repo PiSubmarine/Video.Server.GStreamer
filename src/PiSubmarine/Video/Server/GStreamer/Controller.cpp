@@ -47,6 +47,11 @@ namespace PiSubmarine::Video::Server::GStreamer
         return m_Impl->Core.SetTarget(target);
     }
 
+    Error::Api::Result<::PiSubmarine::Video::Telemetry::Api::Status> Controller::GetStatus() const
+    {
+        return m_Impl->Core.GetStatus();
+    }
+
     Error::Api::Result<void> Controller::Subscribe(const Subscription::Api::SubscribeRequest& request)
     {
         return m_Impl->Core.Subscribe(request);

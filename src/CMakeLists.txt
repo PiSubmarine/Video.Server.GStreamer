@@ -265,3 +265,6 @@ target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Time.Tickabl
 
 PiSubmarineAddDependency("https://github.com/PiSubmarine/Video.Subscription.Api.git" "")
 target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Video.Subscription.Api)
+
+PiSubmarineAddDependency("https://github.com/PiSubmarine/Video.Telemetry.Api.git" "")
+target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Video.Telemetry.Api)
