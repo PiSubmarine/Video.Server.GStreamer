@@ -413,19 +413,46 @@ namespace PiSubmarine::Video::Server::GStreamer
     {
         static_cast<void>(logger);
 
+        const auto mediaFoundationDescription = [profile]() -> std::string
+        {
+            switch (profile)
+            {
+            case Control::Video::Api::StreamProfile::LowLatency:
+                return "videoconvert ! video/x-raw,format=NV12 ! "
+                       "mfh264enc low-latency=true bitrate=1000 gop-size=15 bframes=0 cabac=false";
+            case Control::Video::Api::StreamProfile::Standard:
+                return "videoconvert ! video/x-raw,format=NV12 ! "
+                       "mfh264enc low-latency=true bitrate=2500 gop-size=30 bframes=0";
+            case Control::Video::Api::StreamProfile::HighQuality:
+                return "videoconvert ! video/x-raw,format=NV12 ! "
+                       "mfh264enc bitrate=5000 gop-size=60 bframes=0";
+            }
+
+            return "videoconvert ! video/x-raw,format=NV12 ! "
+                   "mfh264enc low-latency=true bitrate=2500 gop-size=30 bframes=0";
+        };
+
         const auto x264Description = [profile]() -> std::string
         {
             switch (profile)
             {
             case Control::Video::Api::StreamProfile::LowLatency:
-                return "x264enc tune=zerolatency speed-preset=ultrafast bitrate=1000 key-int-max=15";
+                return "videoconvert ! video/x-raw,format=NV12 ! "
+                       "x264enc tune=zerolatency speed-preset=ultrafast bitrate=1000 key-int-max=15 "
+                       "bframes=0 cabac=false byte-stream=true sliced-threads=true";
             case Control::Video::Api::StreamProfile::Standard:
-                return "x264enc tune=zerolatency speed-preset=veryfast bitrate=2500 key-int-max=30";
+                return "videoconvert ! video/x-raw,format=NV12 ! "
+                       "x264enc tune=zerolatency speed-preset=veryfast bitrate=2500 key-int-max=30 "
+                       "bframes=0 byte-stream=true sliced-threads=true";
             case Control::Video::Api::StreamProfile::HighQuality:
-                return "x264enc tune=zerolatency speed-preset=fast bitrate=5000 key-int-max=60";
+                return "videoconvert ! video/x-raw,format=NV12 ! "
+                       "x264enc tune=zerolatency speed-preset=fast bitrate=5000 key-int-max=60 "
+                       "bframes=0 byte-stream=true";
             }
 
-            return "x264enc tune=zerolatency speed-preset=veryfast bitrate=2500 key-int-max=30";
+            return "videoconvert ! video/x-raw,format=NV12 ! "
+                   "x264enc tune=zerolatency speed-preset=veryfast bitrate=2500 key-int-max=30 "
+                   "bframes=0 byte-stream=true sliced-threads=true";
         };
 
         const auto openH264Description = [profile]() -> std::string
@@ -433,14 +460,23 @@ namespace PiSubmarine::Video::Server::GStreamer
             switch (profile)
             {
             case Control::Video::Api::StreamProfile::LowLatency:
-                return "openh264enc bitrate=1000000 complexity=low";
+                return "videoconvert ! video/x-raw,format=I420 ! "
+                       "openh264enc bitrate=1000000 complexity=low usage-type=camera";
             case Control::Video::Api::StreamProfile::Standard:
-                return "openh264enc bitrate=2500000 complexity=medium";
+                return "videoconvert ! video/x-raw,format=I420 ! "
+                       "openh264enc bitrate=2500000 complexity=medium usage-type=camera";
             case Control::Video::Api::StreamProfile::HighQuality:
-                return "openh264enc bitrate=5000000 complexity=high";
+                return "videoconvert ! video/x-raw,format=I420 ! "
+                       "openh264enc bitrate=5000000 complexity=high usage-type=camera";
             }
 
-            return "openh264enc bitrate=2500000 complexity=medium";
+            return "videoconvert ! video/x-raw,format=I420 ! "
+                   "openh264enc bitrate=2500000 complexity=medium usage-type=camera";
+        };
+
+        if (HasFactory("mfh264enc"))
+        {
+            return mediaFoundationDescription();
         };
 
         if (HasFactory("x264enc"))
@@ -455,12 +491,18 @@ namespace PiSubmarine::Video::Server::GStreamer
 
         throw std::runtime_error(
             std::format(
-                "No suitable GStreamer H.264 encoder element was found. x264enc={}, openh264enc={}. Visible '264' "
+                "No suitable GStreamer H.264 encoder element was found. mfh264enc={}, x264enc={}, openh264enc={}. Visible '264' "
                 "factories: {}. Visible 'enc' factories: {}",
+                HasFactory("mfh264enc"),
                 HasFactory("x264enc"),
                 HasFactory("openh264enc"),
                 JoinNames(CollectMatchingFactories("264")),
                 JoinNames(CollectMatchingFactories("enc"))));
+    }
+
+    std::string GstreamerPipeline::BuildPayloaderDescription()
+    {
+        return "rtph264pay pt=96 config-interval=-1 aggregate-mode=zero-latency";
     }
 
     std::string GstreamerPipeline::BuildPipelineDescription(
@@ -474,10 +516,11 @@ namespace PiSubmarine::Video::Server::GStreamer
         }
 
         return std::format(
-            "{} ! queue leaky=downstream max-size-buffers=1 ! videoconvert ! {} ! rtph264pay pt=96 config-interval=1 ! "
+            "{} ! queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! {} ! {} ! "
             "multiudpsink name=subscription_sink sync=false async=false",
             BuildSourceDescription(state.Configuration.VideoSource, logger),
-            BuildEncoderDescription(enabledState->Profile, logger));
+            BuildEncoderDescription(enabledState->Profile, logger),
+            BuildPayloaderDescription());
     }
 
     void GstreamerPipeline::ApplyEndpoints(const std::vector<Subscription::Api::Endpoint>& endpoints)

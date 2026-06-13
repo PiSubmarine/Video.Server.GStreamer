@@ -6,7 +6,8 @@ project(${PISUBMARINE_MODULE_NAME}.Test LANGUAGES CXX)
 
 set(${PISUBMARINE_MODULE_NAME}.Test.Sources
         "PiSubmarine/Video/Server/GStreamer/ControllerCoreTest.cpp"
-        "PiSubmarine/Video/Server/GStreamer/ConfigTest.cpp")
+        "PiSubmarine/Video/Server/GStreamer/ConfigTest.cpp"
+        "PiSubmarine/Video/Server/GStreamer/GstreamerPipelineTest.cpp")
 
 enable_testing()
 
