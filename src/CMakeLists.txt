@@ -214,6 +214,7 @@ if(WIN32)
             "gmodule-2.0:gmodule-2.0"
             "intl:intl"
             "iconv:iconv"
+            "zlib:zlibd;zlib"
             "pcre2-8:pcre2-8d;pcre2-8"
             "ffi:ffi")
         string(REPLACE ":" ";" _windows_support_library_parts "${_windows_support_library_spec}")

@@ -81,12 +81,12 @@ namespace PiSubmarine::Video::Server::GStreamer
 
             if (elementName == "mfvideosrc")
             {
-                return "mfvideosrc ! video/x-raw";
+                return "mfvideosrc";
             }
 
             if (elementName == "ksvideosrc")
             {
-                return "ksvideosrc do-stats=true ! video/x-raw";
+                return "ksvideosrc";
             }
 
             if (elementName == "autovideosrc")
@@ -222,6 +222,7 @@ namespace PiSubmarine::Video::Server::GStreamer
 
         if (!m_Pipeline)
         {
+            SPDLOG_LOGGER_INFO(m_Logger, "Using GStreamer pipeline: {}", description);
             GError* error = nullptr;
             auto* pipeline = gst_parse_launch(description.c_str(), &error);
             if (!pipeline)
@@ -388,13 +389,8 @@ namespace PiSubmarine::Video::Server::GStreamer
         }
 
         const auto* autoDetect = std::get_if<AutoDetectSource>(&source);
-#if defined(_WIN32)
-        const auto defaultCandidates = std::vector<std::string>{"ksvideosrc", "mfvideosrc", "autovideosrc"};
-#else
-        const auto defaultCandidates = std::vector<std::string>{"libcamerasrc", "v4l2src", "autovideosrc"};
-#endif
         const auto candidates = autoDetect->PreferredElementNames.empty()
-            ? defaultCandidates
+            ? std::vector<std::string>{"libcamerasrc", "v4l2src", "mfvideosrc", "ksvideosrc", "autovideosrc"}
             : autoDetect->PreferredElementNames;
 
         for (const auto& candidate : candidates)
@@ -418,44 +414,25 @@ namespace PiSubmarine::Video::Server::GStreamer
     {
         static_cast<void>(logger);
 
-        const auto mediaFoundationDescription = [profile]() -> std::string
-        {
-            switch (profile)
-            {
-            case Control::Video::Api::StreamProfile::LowLatency:
-                return "videoconvert ! video/x-raw,format=NV12 ! "
-                       "mfh264enc low-latency=true bitrate=1000 gop-size=15 bframes=0 cabac=false";
-            case Control::Video::Api::StreamProfile::Standard:
-                return "videoconvert ! video/x-raw,format=NV12 ! "
-                       "mfh264enc low-latency=true bitrate=2500 gop-size=30 bframes=0";
-            case Control::Video::Api::StreamProfile::HighQuality:
-                return "videoconvert ! video/x-raw,format=NV12 ! "
-                       "mfh264enc bitrate=5000 gop-size=60 bframes=0";
-            }
-
-            return "videoconvert ! video/x-raw,format=NV12 ! "
-                   "mfh264enc low-latency=true bitrate=2500 gop-size=30 bframes=0";
-        };
-
         const auto x264Description = [profile]() -> std::string
         {
             switch (profile)
             {
             case Control::Video::Api::StreamProfile::LowLatency:
-                return "videoconvert ! video/x-raw,format=NV12 ! "
+                return "videoconvert ! video/x-raw,format=I420 ! "
                        "x264enc tune=zerolatency speed-preset=ultrafast bitrate=1000 key-int-max=15 "
                        "bframes=0 cabac=false byte-stream=true sliced-threads=true";
             case Control::Video::Api::StreamProfile::Standard:
-                return "videoconvert ! video/x-raw,format=NV12 ! "
+                return "videoconvert ! video/x-raw,format=I420 ! "
                        "x264enc tune=zerolatency speed-preset=veryfast bitrate=2500 key-int-max=30 "
                        "bframes=0 byte-stream=true sliced-threads=true";
             case Control::Video::Api::StreamProfile::HighQuality:
-                return "videoconvert ! video/x-raw,format=NV12 ! "
+                return "videoconvert ! video/x-raw,format=I420 ! "
                        "x264enc tune=zerolatency speed-preset=fast bitrate=5000 key-int-max=60 "
                        "bframes=0 byte-stream=true";
             }
 
-            return "videoconvert ! video/x-raw,format=NV12 ! "
+            return "videoconvert ! video/x-raw,format=I420 ! "
                    "x264enc tune=zerolatency speed-preset=veryfast bitrate=2500 key-int-max=30 "
                    "bframes=0 byte-stream=true sliced-threads=true";
         };
@@ -479,11 +456,6 @@ namespace PiSubmarine::Video::Server::GStreamer
                    "openh264enc bitrate=2500000 complexity=medium usage-type=camera";
         };
 
-        if (HasFactory("mfh264enc"))
-        {
-            return mediaFoundationDescription();
-        };
-
         if (HasFactory("x264enc"))
         {
             return x264Description();
@@ -496,9 +468,8 @@ namespace PiSubmarine::Video::Server::GStreamer
 
         throw std::runtime_error(
             std::format(
-                "No suitable GStreamer H.264 encoder element was found. mfh264enc={}, x264enc={}, openh264enc={}. Visible '264' "
+                "No suitable GStreamer H.264 encoder element was found. x264enc={}, openh264enc={}. Visible '264' "
                 "factories: {}. Visible 'enc' factories: {}",
-                HasFactory("mfh264enc"),
                 HasFactory("x264enc"),
                 HasFactory("openh264enc"),
                 JoinNames(CollectMatchingFactories("264")),
