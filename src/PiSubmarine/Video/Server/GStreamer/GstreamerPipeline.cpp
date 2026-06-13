@@ -81,12 +81,12 @@ namespace PiSubmarine::Video::Server::GStreamer
 
             if (elementName == "mfvideosrc")
             {
-                return "mfvideosrc";
+                return "mfvideosrc ! video/x-raw";
             }
 
             if (elementName == "ksvideosrc")
             {
-                return "ksvideosrc";
+                return "ksvideosrc ! video/x-raw";
             }
 
             if (elementName == "autovideosrc")
