@@ -167,17 +167,14 @@ if(WIN32)
             "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib")
     set(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES "")
     macro(_pisubmarine_append_windows_library result_variable library_label)
-        set(options)
-        set(oneValueArgs)
-        set(multiValueArgs NAMES)
-        cmake_parse_arguments(PARSE_ARGV 2 WINDOWS_LIBRARY "${options}" "${oneValueArgs}" "${multiValueArgs}")
-        if(NOT WINDOWS_LIBRARY_NAMES)
+        set(_windows_library_names ${ARGN})
+        if(NOT _windows_library_names)
             message(FATAL_ERROR "No library names were provided for '${library_label}'")
         endif()
 
         unset(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY CACHE)
         find_library(PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY
-                NAMES ${WINDOWS_LIBRARY_NAMES}
+                NAMES ${_windows_library_names}
                 PATHS ${PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY_DIRS}
                 NO_DEFAULT_PATH)
         if(NOT PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARY)
@@ -207,11 +204,10 @@ if(WIN32)
         string(REPLACE ":" ";" _windows_gstreamer_library_parts "${_windows_gstreamer_library_spec}")
         list(GET _windows_gstreamer_library_parts 0 _windows_gstreamer_library_label)
         list(GET _windows_gstreamer_library_parts 1 _windows_gstreamer_library_name_list)
-        string(REPLACE ";" ";" _windows_gstreamer_library_name_list "${_windows_gstreamer_library_name_list}")
         _pisubmarine_append_windows_library(
                 PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES
                 "${_windows_gstreamer_library_label}"
-                NAMES ${_windows_gstreamer_library_name_list})
+                ${_windows_gstreamer_library_name_list})
     endforeach()
 
     foreach(_windows_support_library_spec IN ITEMS
@@ -223,11 +219,10 @@ if(WIN32)
         string(REPLACE ":" ";" _windows_support_library_parts "${_windows_support_library_spec}")
         list(GET _windows_support_library_parts 0 _windows_support_library_label)
         list(GET _windows_support_library_parts 1 _windows_support_library_name_list)
-        string(REPLACE ";" ";" _windows_support_library_name_list "${_windows_support_library_name_list}")
         _pisubmarine_append_windows_library(
                 PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES
                 "${_windows_support_library_label}"
-                NAMES ${_windows_support_library_name_list})
+                ${_windows_support_library_name_list})
     endforeach()
 
     list(REMOVE_DUPLICATES PISUBMARINE_GSTREAMER_WINDOWS_SUPPORT_LIBRARIES)
