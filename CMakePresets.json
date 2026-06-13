@@ -29,6 +29,8 @@
       "name": "windows-msvc-debug",
       "displayName": "Windows MSVC Debug",
       "inherits": "windows-msvc-base",
+      "binaryDir": "C:/t/b1",
+      "installDir": "C:/t/i1",
       "architecture": {
         "value": "x64",
         "strategy": "external"
