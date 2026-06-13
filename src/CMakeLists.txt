@@ -73,6 +73,7 @@ set(PISUBMARINE_GSTREAMER_STATIC_PLUGIN_NAMES
         coreelements
         autodetect
         videoconvertscale
+        videoparsersbad
         openh264
         rtp
         udp)
@@ -80,6 +81,7 @@ set(PISUBMARINE_GSTREAMER_STATIC_PLUGIN_PACKAGES
         gstcoreelements
         gstautodetect
         gstvideoconvertscale
+        gstvideoparsersbad
         gstopenh264
         gstrtp
         gstudp)
@@ -191,6 +193,7 @@ if(WIN32)
     foreach(_windows_gstreamer_library_spec IN ITEMS
             "gstbase-1.0:gstbase-1.0"
             "gstvideo-1.0:gstvideo-1.0"
+            "gstcodecparsers-1.0:gstcodecparsers-1.0"
             "gstrtp-1.0:gstrtp-1.0"
             "gstaudio-1.0:gstaudio-1.0"
             "gsttag-1.0:gsttag-1.0"

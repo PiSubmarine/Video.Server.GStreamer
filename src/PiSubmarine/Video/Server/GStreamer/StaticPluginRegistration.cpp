@@ -11,6 +11,7 @@ extern "C"
 GST_PLUGIN_STATIC_DECLARE(coreelements);
 GST_PLUGIN_STATIC_DECLARE(autodetect);
 GST_PLUGIN_STATIC_DECLARE(videoconvertscale);
+GST_PLUGIN_STATIC_DECLARE(videoparsersbad);
 GST_PLUGIN_STATIC_DECLARE(openh264);
 GST_PLUGIN_STATIC_DECLARE(rtp);
 GST_PLUGIN_STATIC_DECLARE(udp);
@@ -40,6 +41,8 @@ namespace PiSubmarine::Video::Server::GStreamer
             GST_PLUGIN_STATIC_REGISTER(autodetect);
             SPDLOG_LOGGER_INFO(logger, "Registering static GStreamer plugin 'videoconvertscale'");
             GST_PLUGIN_STATIC_REGISTER(videoconvertscale);
+            SPDLOG_LOGGER_INFO(logger, "Registering static GStreamer plugin 'videoparsersbad'");
+            GST_PLUGIN_STATIC_REGISTER(videoparsersbad);
             SPDLOG_LOGGER_INFO(logger, "Registering static GStreamer plugin 'openh264'");
             GST_PLUGIN_STATIC_REGISTER(openh264);
             SPDLOG_LOGGER_INFO(logger, "Registering static GStreamer plugin 'rtp'");

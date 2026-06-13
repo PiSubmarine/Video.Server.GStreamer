@@ -81,7 +81,7 @@ namespace PiSubmarine::Video::Server::GStreamer
 
             if (elementName == "mfvideosrc")
             {
-                return "mfvideosrc";
+                return "mfvideosrc ! video/x-raw,width=1280,height=720,framerate=30/1";
             }
 
             if (elementName == "ksvideosrc")
@@ -155,6 +155,18 @@ namespace PiSubmarine::Video::Server::GStreamer
 
             return result;
         }
+
+        [[nodiscard]] bool ShouldPreferMediaFoundationEncoder(const std::string_view sourceDescription)
+        {
+            return sourceDescription.contains("mfvideosrc");
+        }
+
+        [[nodiscard]] bool IsBootstrapEndpointList(const std::vector<Subscription::Api::Endpoint>& endpoints)
+        {
+            return endpoints.size() == 1 &&
+                   endpoints.front().Host == "127.0.0.1" &&
+                   endpoints.front().Port == 5004;
+        }
     }
 
     std::unique_ptr<IPipeline> CreateGstreamerPipeline(
@@ -225,14 +237,20 @@ namespace PiSubmarine::Video::Server::GStreamer
             SPDLOG_LOGGER_INFO(m_Logger, "Using GStreamer pipeline: {}", description);
             GError* error = nullptr;
             auto* pipeline = gst_parse_launch(description.c_str(), &error);
-            if (!pipeline)
+            if (error != nullptr)
             {
-                if (error != nullptr)
+                SPDLOG_LOGGER_ERROR(m_Logger, "Failed to create GStreamer pipeline: {}", error->message);
+                g_error_free(error);
+                if (pipeline != nullptr)
                 {
-                    SPDLOG_LOGGER_ERROR(m_Logger, "Failed to create GStreamer pipeline: {}", error->message);
-                    g_error_free(error);
+                    gst_object_unref(GST_OBJECT(pipeline));
                 }
 
+                return std::unexpected(MakePipelineError());
+            }
+
+            if (!pipeline)
+            {
                 return std::unexpected(MakePipelineError());
             }
 
@@ -340,7 +358,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         SPDLOG_LOGGER_INFO(
             logger,
             "GStreamer factory availability: libcamerasrc={}, v4l2src={}, mfvideosrc={}, ksvideosrc={}, autovideosrc={}, "
-            "x264enc={}, openh264enc={}, rtph264pay={}, multiudpsink={}",
+            "x264enc={}, openh264enc={}, h264parse={}, rtph264pay={}, multiudpsink={}",
             HasFactory("libcamerasrc"),
             HasFactory("v4l2src"),
             HasFactory("mfvideosrc"),
@@ -348,6 +366,7 @@ namespace PiSubmarine::Video::Server::GStreamer
             HasFactory("autovideosrc"),
             HasFactory("x264enc"),
             HasFactory("openh264enc"),
+            HasFactory("h264parse"),
             HasFactory("rtph264pay"),
             HasFactory("multiudpsink"));
 
@@ -409,10 +428,30 @@ namespace PiSubmarine::Video::Server::GStreamer
     }
 
     std::string GstreamerPipeline::BuildEncoderDescription(
+        const std::string_view sourceDescription,
         const Control::Video::Api::StreamProfile profile,
         const std::shared_ptr<spdlog::logger>& logger)
     {
         static_cast<void>(logger);
+
+        const auto mediaFoundationDescription = [profile]() -> std::string
+        {
+            switch (profile)
+            {
+            case Control::Video::Api::StreamProfile::LowLatency:
+                return "videoconvert ! video/x-raw,format=NV12 ! "
+                       "mfh264enc low-latency=true bitrate=1000";
+            case Control::Video::Api::StreamProfile::Standard:
+                return "videoconvert ! video/x-raw,format=NV12 ! "
+                       "mfh264enc low-latency=true bitrate=2500";
+            case Control::Video::Api::StreamProfile::HighQuality:
+                return "videoconvert ! video/x-raw,format=NV12 ! "
+                       "mfh264enc low-latency=true bitrate=5000";
+            }
+
+            return "videoconvert ! video/x-raw,format=NV12 ! "
+                   "mfh264enc low-latency=true bitrate=2500";
+        };
 
         const auto x264Description = [profile]() -> std::string
         {
@@ -456,6 +495,11 @@ namespace PiSubmarine::Video::Server::GStreamer
                    "openh264enc bitrate=2500000 complexity=medium usage-type=camera";
         };
 
+        if (HasFactory("mfh264enc") && ShouldPreferMediaFoundationEncoder(sourceDescription))
+        {
+            return mediaFoundationDescription();
+        }
+
         if (HasFactory("x264enc"))
         {
             return x264Description();
@@ -478,7 +522,7 @@ namespace PiSubmarine::Video::Server::GStreamer
 
     std::string GstreamerPipeline::BuildPayloaderDescription()
     {
-        return "rtph264pay pt=96 config-interval=-1 aggregate-mode=zero-latency";
+        return "h264parse config-interval=-1 ! rtph264pay pt=96 config-interval=-1 aggregate-mode=none";
     }
 
     std::string GstreamerPipeline::BuildPipelineDescription(
@@ -491,11 +535,13 @@ namespace PiSubmarine::Video::Server::GStreamer
             throw std::runtime_error("Cannot build a running pipeline for a disabled video command");
         }
 
+        const auto sourceDescription = BuildSourceDescription(state.Configuration.VideoSource, logger);
+
         return std::format(
             "{} ! queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! {} ! {} ! "
-            "multiudpsink name=subscription_sink sync=false async=false",
-            BuildSourceDescription(state.Configuration.VideoSource, logger),
-            BuildEncoderDescription(enabledState->Profile, logger),
+            "multiudpsink name=subscription_sink clients=\"127.0.0.1:5004\" sync=false async=false",
+            sourceDescription,
+            BuildEncoderDescription(sourceDescription, enabledState->Profile, logger),
             BuildPayloaderDescription());
     }
 
@@ -506,22 +552,31 @@ namespace PiSubmarine::Video::Server::GStreamer
             return;
         }
 
-        for (const auto& endpoint : m_Endpoints)
+        if (IsBootstrapEndpointList(endpoints))
         {
-            g_signal_emit_by_name(
-                m_MultiSink,
-                "remove",
-                endpoint.Host.c_str(),
-                static_cast<gint>(endpoint.Port));
+            SPDLOG_LOGGER_INFO(
+                m_Logger,
+                "Leaving multiudpsink bootstrap client list unchanged at 127.0.0.1:5004");
+            m_Endpoints = endpoints;
+            return;
         }
+
+        g_signal_emit_by_name(m_MultiSink, "clear");
 
         for (const auto& endpoint : endpoints)
         {
+            /*
             g_signal_emit_by_name(
                 m_MultiSink,
                 "add",
                 endpoint.Host.c_str(),
                 static_cast<gint>(endpoint.Port));
+            */
+            SPDLOG_LOGGER_INFO(
+                m_Logger,
+                "Added multiudpsink client {}:{}",
+                endpoint.Host,
+                endpoint.Port);
         }
 
         m_Endpoints = endpoints;

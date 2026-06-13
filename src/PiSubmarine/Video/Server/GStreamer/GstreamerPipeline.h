@@ -42,6 +42,7 @@ namespace PiSubmarine::Video::Server::GStreamer
             const Source& source,
             const std::shared_ptr<spdlog::logger>& logger);
         [[nodiscard]] static std::string BuildEncoderDescription(
+            const std::string_view sourceDescription,
             Control::Video::Api::StreamProfile profile,
             const std::shared_ptr<spdlog::logger>& logger);
         [[nodiscard]] static std::string BuildPayloaderDescription();

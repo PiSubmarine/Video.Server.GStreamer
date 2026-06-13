@@ -1,3 +1,8 @@
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
 #define private public
 #include "PiSubmarine/Video/Server/GStreamer/GstreamerPipeline.h"
 #undef private
@@ -30,6 +35,18 @@ namespace PiSubmarine::Video::Server::GStreamer
     {
         EXPECT_EQ(
             GstreamerPipeline::BuildPayloaderDescription(),
-            "rtph264pay pt=96 config-interval=-1 aggregate-mode=zero-latency");
+            "h264parse config-interval=-1 ! rtph264pay pt=96 config-interval=-1 aggregate-mode=none");
+    }
+
+    TEST(GstreamerPipelineTest, BuildEncoderDescriptionUsesValidatedMediaFoundationSettingsForExplicitSource)
+    {
+        const auto logger = CreateLogger();
+
+        EXPECT_EQ(
+            GstreamerPipeline::BuildEncoderDescription(
+                "mfvideosrc ! video/x-raw,width=1280,height=720,framerate=30/1",
+                Control::Video::Api::StreamProfile::LowLatency,
+                logger),
+            "videoconvert ! video/x-raw,format=NV12 ! mfh264enc low-latency=true bitrate=1000");
     }
 }
