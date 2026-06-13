@@ -86,7 +86,7 @@ namespace PiSubmarine::Video::Server::GStreamer
 
             if (elementName == "ksvideosrc")
             {
-                return "ksvideosrc ! video/x-raw";
+                return "ksvideosrc do-stats=true ! video/x-raw";
             }
 
             if (elementName == "autovideosrc")
@@ -388,8 +388,13 @@ namespace PiSubmarine::Video::Server::GStreamer
         }
 
         const auto* autoDetect = std::get_if<AutoDetectSource>(&source);
+#if defined(_WIN32)
+        const auto defaultCandidates = std::vector<std::string>{"ksvideosrc", "mfvideosrc", "autovideosrc"};
+#else
+        const auto defaultCandidates = std::vector<std::string>{"libcamerasrc", "v4l2src", "autovideosrc"};
+#endif
         const auto candidates = autoDetect->PreferredElementNames.empty()
-            ? std::vector<std::string>{"libcamerasrc", "v4l2src", "mfvideosrc", "ksvideosrc", "autovideosrc"}
+            ? defaultCandidates
             : autoDetect->PreferredElementNames;
 
         for (const auto& candidate : candidates)
