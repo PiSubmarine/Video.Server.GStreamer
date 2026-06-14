@@ -29,12 +29,41 @@
       "name": "windows-msvc-debug",
       "displayName": "Windows MSVC Debug",
       "inherits": "windows-msvc-base",
-      "binaryDir": "C:/t/b1",
-      "installDir": "C:/t/i1",
       "architecture": {
         "value": "x64",
         "strategy": "external"
       },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-mingw-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/toolchains/mingw.cmake",
+        "VCPKG_HOST_TRIPLET": "x64-mingw-static",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "vendor": {
+        "jetbrains.com/clion": {
+          "toolchain": "MinGW"
+        }
+      }
+    },
+    {
+      "name": "windows-mingw-debug",
+      "displayName": "Windows MinGW Debug",
+      "inherits": "windows-mingw-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
