@@ -9,10 +9,12 @@
 #include <unordered_map>
 
 #include <CLI/CLI.hpp>
+#include <gst/gst.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
 #include "PiSubmarine/Error/Api/MakeError.h"
+#include "PiSubmarine/Gstreamer/Build/Plugins.h"
 #include "PiSubmarine/Lease/Api/ErrorCode.h"
 #include "PiSubmarine/Lease/Api/ILeaseValidator.h"
 #include "PiSubmarine/Lease/Api/IResourceRegistry.h"
@@ -36,6 +38,28 @@ namespace PiSubmarine::Video::Server::GStreamer
             }
 
             return logger;
+        }
+
+        [[nodiscard]] bool EnsureGstreamerReady(const std::shared_ptr<spdlog::logger>& logger)
+        {
+            GError* error = nullptr;
+            if (!gst_is_initialized() && !gst_init_check(nullptr, nullptr, &error))
+            {
+                if (logger && error != nullptr)
+                {
+                    SPDLOG_LOGGER_ERROR(logger, "gst_init_check failed: {}", error->message);
+                }
+
+                if (error != nullptr)
+                {
+                    g_error_free(error);
+                }
+
+                return false;
+            }
+
+            ::PiSubmarine::Gstreamer::Build::Plugins::RegisterStatic(logger);
+            return true;
         }
 
         std::atomic_bool KeepRunning = true;
@@ -205,6 +229,10 @@ int main(int argc, char** argv)
 
         Video::Server::GStreamer::Detail::LoggerFactory loggerFactory;
         auto logger = loggerFactory.CreateLogger("Video.Server.GStreamer.App");
+        if (!Video::Server::GStreamer::Detail::EnsureGstreamerReady(logger))
+        {
+            return 6;
+        }
 
         Video::Server::GStreamer::Detail::ResourceRegistry resourceRegistry;
         Video::Server::GStreamer::Detail::AlwaysTrueLeaseValidator leaseValidator;

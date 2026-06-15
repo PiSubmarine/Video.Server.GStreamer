@@ -10,7 +10,6 @@
 #include <spdlog/spdlog.h>
 
 #include "PiSubmarine/Error/Api/MakeError.h"
-#include "PiSubmarine/Video/Server/GStreamer/StaticPluginRegistration.h"
 
 namespace PiSubmarine::Video::Server::GStreamer
 {
@@ -164,13 +163,6 @@ namespace PiSubmarine::Video::Server::GStreamer
         [[nodiscard]] bool ShouldPreferMediaFoundationEncoder(const std::string_view sourceDescription)
         {
             return sourceDescription.contains("mfvideosrc");
-        }
-
-        [[nodiscard]] bool IsBootstrapEndpointList(const std::vector<Subscription::Api::Endpoint>& endpoints)
-        {
-            return endpoints.size() == 1 &&
-                   endpoints.front().Host == "127.0.0.1" &&
-                   endpoints.front().Port == 5004;
         }
     }
 
@@ -363,8 +355,6 @@ namespace PiSubmarine::Video::Server::GStreamer
                 g_error_free(error);
                 return;
             }
-
-            RegisterStaticPlugins(logger);
         });
 
         return initialized;
@@ -556,7 +546,7 @@ namespace PiSubmarine::Video::Server::GStreamer
 
         return std::format(
             "{} ! queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! {} ! {} ! "
-            "multiudpsink name=subscription_sink clients=\"127.0.0.1:5004\" sync=false async=false",
+            "multiudpsink name=subscription_sink sync=false async=false",
             sourceDescription,
             BuildEncoderDescription(sourceDescription, enabledState->Profile, logger),
             BuildPayloaderDescription());
@@ -569,26 +559,15 @@ namespace PiSubmarine::Video::Server::GStreamer
             return;
         }
 
-        if (IsBootstrapEndpointList(endpoints))
-        {
-            SPDLOG_LOGGER_INFO(
-                m_Logger,
-                "Leaving multiudpsink bootstrap client list unchanged at 127.0.0.1:5004");
-            m_Endpoints = endpoints;
-            return;
-        }
-
         g_signal_emit_by_name(m_MultiSink, "clear");
 
         for (const auto& endpoint : endpoints)
         {
-            /*
             g_signal_emit_by_name(
                 m_MultiSink,
                 "add",
                 endpoint.Host.c_str(),
                 static_cast<gint>(endpoint.Port));
-            */
             SPDLOG_LOGGER_INFO(
                 m_Logger,
                 "Added multiudpsink client {}:{}",
