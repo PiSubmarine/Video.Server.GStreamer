@@ -18,7 +18,7 @@ include("${pisubmarinebuild_SOURCE_DIR}/PiSubmarine.Build.CMake.cmake")
 PiSubmarineInitModule("PiSubmarine.Video.Server.GStreamer")
 project(${PISUBMARINE_MODULE_NAME})
 enable_testing()
-PiSubmarineAddDependency("https://github.com/PiSubmarine/Gstreamer.Build.git" "")
+PiSubmarineAddDependency("https://github.com/PiSubmarine/Gstreamer.Build.git" "main")
 PiSubmarineConfigureModule()
 
 if(TARGET ${PISUBMARINE_MODULE_NAME}.App)

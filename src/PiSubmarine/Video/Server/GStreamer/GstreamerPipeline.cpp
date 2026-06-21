@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 
 #include "PiSubmarine/Error/Api/MakeError.h"
+#include "PiSubmarine/Gstreamer/Build/Plugins.h"
 
 namespace PiSubmarine::Video::Server::GStreamer
 {
@@ -21,6 +22,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         }
 
         std::once_flag GstreamerInitFlag;
+        std::once_flag GstreamerStaticPluginRegistrationFlag;
         std::once_flag GstreamerDebugFlag;
         std::once_flag GstreamerRegistryDiagnosticsFlag;
         std::shared_ptr<spdlog::logger> GstreamerDebugLogger;
@@ -356,6 +358,14 @@ namespace PiSubmarine::Video::Server::GStreamer
                 return;
             }
         });
+
+        if (initialized)
+        {
+            std::call_once(GstreamerStaticPluginRegistrationFlag, [&logger]
+            {
+                ::PiSubmarine::Gstreamer::Build::Plugins::RegisterStatic(logger);
+            });
+        }
 
         return initialized;
     }
