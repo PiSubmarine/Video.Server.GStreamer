@@ -10,7 +10,7 @@ if not exist "%GSTREAMER_BIN%\gst-launch-1.0.exe" (
 
 set "PATH=%GSTREAMER_BIN%;%PATH%"
 
-echo Previewing RTP H.264 stream from udp://127.0.0.1:5004
+echo Previewing RTP H.264 stream from udp://192.168.0.2:5004
 echo Press Ctrl+C to stop preview.
 
 gst-launch-1.0 -v ^
