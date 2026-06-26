@@ -42,6 +42,11 @@ namespace PiSubmarine::Video::Server::GStreamer
         [[nodiscard]] static std::string BuildSourceDescription(
             const Source& source,
             const std::shared_ptr<spdlog::logger>& logger);
+        [[nodiscard]] static std::string BuildHeadDescription(
+            const PipelineHead& head,
+            Control::Video::Api::StreamProfile profile,
+            const std::optional<int>& externalProcessReadFd,
+            const std::shared_ptr<spdlog::logger>& logger);
         [[nodiscard]] static std::string BuildEncoderDescription(
             const std::string_view sourceDescription,
             Control::Video::Api::StreamProfile profile,
@@ -49,7 +54,11 @@ namespace PiSubmarine::Video::Server::GStreamer
         [[nodiscard]] static std::string BuildPayloaderDescription();
         [[nodiscard]] static std::string BuildPipelineDescription(
             const PipelineState& state,
+            const std::optional<int>& externalProcessReadFd,
             const std::shared_ptr<spdlog::logger>& logger);
+        [[nodiscard]] Error::Api::Result<void> StartExternalProcess(const ExternalProcessHead& head);
+        void StopExternalProcess() noexcept;
+        void PollExternalProcess();
         void ApplyEndpoints(const std::vector<Subscription::Api::Endpoint>& endpoints);
         void DrainBusMessages();
         void SetFault(::PiSubmarine::Video::Telemetry::Api::Faults fault) noexcept;
@@ -64,5 +73,11 @@ namespace PiSubmarine::Video::Server::GStreamer
         std::vector<Subscription::Api::Endpoint> m_Endpoints;
         std::optional<PipelineState> m_LastState;
         ::PiSubmarine::Video::Telemetry::Api::Faults m_ActiveFaults{};
+        std::optional<int> m_ExternalProcessReadFd;
+#ifdef _WIN32
+        void* m_ExternalProcessHandle = nullptr;
+#else
+        int m_ExternalProcessId = -1;
+#endif
     };
 }

@@ -9,6 +9,7 @@ add_library(${PISUBMARINE_MODULE_NAME}
         PiSubmarine/Video/Server/GStreamer/GstreamerPipeline.cpp
         "../public/PiSubmarine/Video/Server/GStreamer/Config.h"
         "../public/PiSubmarine/Video/Server/GStreamer/Controller.h"
+        "../public/PiSubmarine/Video/Server/GStreamer/Head.h"
         "../public/PiSubmarine/Video/Server/GStreamer/Source.h"
         "PiSubmarine/Video/Server/GStreamer/ControllerCore.h"
         "PiSubmarine/Video/Server/GStreamer/Pipeline.h"

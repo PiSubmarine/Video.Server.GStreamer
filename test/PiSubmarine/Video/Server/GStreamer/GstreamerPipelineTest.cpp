@@ -38,6 +38,19 @@ namespace PiSubmarine::Video::Server::GStreamer
             "h264parse config-interval=-1 ! rtph264pay pt=96 config-interval=-1 aggregate-mode=none");
     }
 
+    TEST(GstreamerPipelineTest, BuildHeadDescriptionUsesFdsrcForExternalProcessHead)
+    {
+        const auto logger = CreateLogger();
+
+        EXPECT_EQ(
+            GstreamerPipeline::BuildHeadDescription(
+                ExternalProcessHead{.Executable = "rpicam-vid", .Arguments = {"--timeout", "0"}},
+                Control::Video::Api::StreamProfile::LowLatency,
+                42,
+                logger),
+            "fdsrc fd=42 do-timestamp=true");
+    }
+
     TEST(GstreamerPipelineTest, BuildEncoderDescriptionUsesValidatedMediaFoundationSettingsForExplicitSource)
     {
         const auto logger = CreateLogger();
@@ -48,5 +61,24 @@ namespace PiSubmarine::Video::Server::GStreamer
                 Control::Video::Api::StreamProfile::LowLatency,
                 logger),
             "videoconvert ! video/x-raw,format=NV12 ! mfh264enc low-latency=true bitrate=1000");
+    }
+
+    TEST(GstreamerPipelineTest, BuildPipelineDescriptionUsesExternalProcessHeadBeforeRtpTail)
+    {
+        const auto logger = CreateLogger();
+
+        const PipelineState state{
+            .Configuration = Config{
+                .VideoHead = ExternalProcessHead{.Executable = "rpicam-vid", .Arguments = {"--timeout", "0"}}},
+            .Command = Control::Video::Api::Command::Enable(
+                Control::Video::Api::StreamProfile::LowLatency,
+                Control::Video::Api::AutoFocus{}),
+            .Endpoints = {}};
+
+        EXPECT_EQ(
+            GstreamerPipeline::BuildPipelineDescription(state, 7, logger),
+            "fdsrc fd=7 do-timestamp=true ! h264parse config-interval=-1 ! "
+            "rtph264pay pt=96 config-interval=-1 aggregate-mode=none ! "
+            "multiudpsink name=subscription_sink sync=false async=false");
     }
 }

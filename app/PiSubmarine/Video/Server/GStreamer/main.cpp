@@ -195,6 +195,8 @@ int main(int argc, char** argv)
     std::string endpoint = "127.0.0.1:5004";
     std::string profile = "low-latency";
     std::string sourceDescription;
+    std::string externalProcessExecutable;
+    std::vector<std::string> externalProcessArguments;
     std::string leaseId = "test-lease";
     std::string resourceId = "video-main";
     int tickPeriodMilliseconds = 15;
@@ -203,6 +205,8 @@ int main(int argc, char** argv)
     app.add_option("--endpoint", endpoint, "Single RTP destination in host:port format")->default_val(endpoint);
     app.add_option("--profile", profile, "Video profile: low-latency, standard, high-quality")->default_val(profile);
     app.add_option("--source", sourceDescription, "Optional explicit GStreamer source description");
+    app.add_option("--external-process", externalProcessExecutable, "Optional executable that writes H.264 byte-stream to stdout");
+    app.add_option("--external-arg", externalProcessArguments, "Argument for --external-process; specify once per argument");
     app.add_option("--lease-id", leaseId, "Lease id used for the subscription")->default_val(leaseId);
     app.add_option("--resource-id", resourceId, "Resource id registered by the controller")->default_val(resourceId);
     app.add_option("--tick-period-ms", tickPeriodMilliseconds, "Tick period in milliseconds")
@@ -239,9 +243,24 @@ int main(int argc, char** argv)
 
         Video::Server::GStreamer::Config config;
         config.ResourceId = Lease::Api::ResourceId{.Value = resourceId};
-        if (!sourceDescription.empty())
+        if (!sourceDescription.empty() && !externalProcessExecutable.empty())
         {
-            config.VideoSource = Video::Server::GStreamer::ElementSource{.Description = sourceDescription};
+            SPDLOG_LOGGER_ERROR(
+                logger,
+                "Use either --source for an in-process GStreamer source or --external-process for a stdout H.264 producer.");
+            return 7;
+        }
+
+        if (!externalProcessExecutable.empty())
+        {
+            config.VideoHead = Video::Server::GStreamer::ExternalProcessHead{
+                .Executable = externalProcessExecutable,
+                .Arguments = externalProcessArguments};
+        }
+        else if (!sourceDescription.empty())
+        {
+            config.VideoHead = Video::Server::GStreamer::AutoDetectPipelineHead{
+                .VideoSource = Video::Server::GStreamer::ElementSource{.Description = sourceDescription}};
         }
 
         Video::Server::GStreamer::Controller controller(config, loggerFactory, resourceRegistry, leaseValidator);

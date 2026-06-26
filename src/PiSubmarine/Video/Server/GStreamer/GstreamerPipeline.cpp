@@ -1,11 +1,23 @@
 #include "PiSubmarine/Video/Server/GStreamer/GstreamerPipeline.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#ifndef _WIN32
+#include <spawn.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+extern char** environ;
+#endif
 
 #include <spdlog/spdlog.h>
 
@@ -166,6 +178,20 @@ namespace PiSubmarine::Video::Server::GStreamer
         {
             return sourceDescription.contains("mfvideosrc");
         }
+
+        [[nodiscard]] std::string JoinCommandForLog(
+            const std::string_view executable,
+            const std::vector<std::string>& arguments)
+        {
+            std::string command(executable);
+            for (const auto& argument : arguments)
+            {
+                command += " ";
+                command += argument;
+            }
+
+            return command;
+        }
     }
 
     std::unique_ptr<IPipeline> CreateGstreamerPipeline(
@@ -223,12 +249,22 @@ namespace PiSubmarine::Video::Server::GStreamer
         std::string description;
         try
         {
-            description = BuildPipelineDescription(state, m_Logger);
+            if (const auto* externalProcessHead = std::get_if<ExternalProcessHead>(&state.Configuration.VideoHead))
+            {
+                const auto startProcessResult = StartExternalProcess(*externalProcessHead);
+                if (!startProcessResult.has_value())
+                {
+                    return startProcessResult;
+                }
+            }
+
+            description = BuildPipelineDescription(state, m_ExternalProcessReadFd, m_Logger);
         }
         catch (const std::exception& exception)
         {
             SPDLOG_LOGGER_ERROR(m_Logger, "Failed to prepare GStreamer pipeline description: {}", exception.what());
             SetFault(ClassifyApplyFailure(exception.what()));
+            StopExternalProcess();
             return std::unexpected(MakePipelineError());
         }
 
@@ -247,12 +283,14 @@ namespace PiSubmarine::Video::Server::GStreamer
                     gst_object_unref(GST_OBJECT(pipeline));
                 }
 
+                StopExternalProcess();
                 return std::unexpected(MakePipelineError());
             }
 
             if (!pipeline)
             {
                 SetFault(ClassifyApplyFailure(description));
+                StopExternalProcess();
                 return std::unexpected(MakePipelineError());
             }
 
@@ -263,6 +301,7 @@ namespace PiSubmarine::Video::Server::GStreamer
                 SPDLOG_LOGGER_ERROR(m_Logger, "Failed to find multiudpsink in GStreamer pipeline");
                 SetFault(::PiSubmarine::Video::Telemetry::Api::Faults::NetworkError);
                 m_Pipeline.reset();
+                StopExternalProcess();
                 return std::unexpected(MakePipelineError());
             }
 
@@ -274,6 +313,7 @@ namespace PiSubmarine::Video::Server::GStreamer
                 SetFault(ClassifyApplyFailure(description));
                 m_MultiSink = nullptr;
                 m_Pipeline.reset();
+                StopExternalProcess();
                 return std::unexpected(MakePipelineError());
             }
 
@@ -297,6 +337,7 @@ namespace PiSubmarine::Video::Server::GStreamer
     {
         if (!m_Pipeline)
         {
+            StopExternalProcess();
             return {};
         }
 
@@ -310,6 +351,7 @@ namespace PiSubmarine::Video::Server::GStreamer
         m_Endpoints.clear();
         m_LastState.reset();
         m_Pipeline.reset();
+        StopExternalProcess();
         SPDLOG_LOGGER_INFO(m_Logger, "Stopped GStreamer video pipeline");
         return {};
     }
@@ -317,6 +359,7 @@ namespace PiSubmarine::Video::Server::GStreamer
     void GstreamerPipeline::PollBus()
     {
         DrainBusMessages();
+        PollExternalProcess();
     }
 
     bool GstreamerPipeline::IsRunning() const noexcept
@@ -375,12 +418,13 @@ namespace PiSubmarine::Video::Server::GStreamer
         SPDLOG_LOGGER_INFO(
             logger,
             "GStreamer factory availability: libcamerasrc={}, v4l2src={}, mfvideosrc={}, ksvideosrc={}, autovideosrc={}, "
-            "x264enc={}, openh264enc={}, h264parse={}, rtph264pay={}, multiudpsink={}",
+            "fdsrc={}, x264enc={}, openh264enc={}, h264parse={}, rtph264pay={}, multiudpsink={}",
             HasFactory("libcamerasrc"),
             HasFactory("v4l2src"),
             HasFactory("mfvideosrc"),
             HasFactory("ksvideosrc"),
             HasFactory("autovideosrc"),
+            HasFactory("fdsrc"),
             HasFactory("x264enc"),
             HasFactory("openh264enc"),
             HasFactory("h264parse"),
@@ -442,6 +486,35 @@ namespace PiSubmarine::Video::Server::GStreamer
                 "No suitable GStreamer video source element was found. Candidates: [{}]. Visible 'video' factories: {}",
                 JoinNames(candidates),
                 JoinNames(CollectMatchingFactories("video"))));
+    }
+
+    std::string GstreamerPipeline::BuildHeadDescription(
+        const PipelineHead& head,
+        const Control::Video::Api::StreamProfile profile,
+        const std::optional<int>& externalProcessReadFd,
+        const std::shared_ptr<spdlog::logger>& logger)
+    {
+        if (const auto* autoDetectHead = std::get_if<AutoDetectPipelineHead>(&head))
+        {
+            const auto sourceDescription = BuildSourceDescription(autoDetectHead->VideoSource, logger);
+            return std::format(
+                "{} ! queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! {}",
+                sourceDescription,
+                BuildEncoderDescription(sourceDescription, profile, logger));
+        }
+
+        const auto* externalProcessHead = std::get_if<ExternalProcessHead>(&head);
+        if (!externalProcessHead)
+        {
+            throw std::runtime_error("Unsupported GStreamer pipeline head configuration");
+        }
+
+        if (!externalProcessReadFd.has_value())
+        {
+            throw std::runtime_error("External process pipeline head requires a readable stdout pipe");
+        }
+
+        return std::format("fdsrc fd={} do-timestamp=true", *externalProcessReadFd);
     }
 
     std::string GstreamerPipeline::BuildEncoderDescription(
@@ -544,6 +617,7 @@ namespace PiSubmarine::Video::Server::GStreamer
 
     std::string GstreamerPipeline::BuildPipelineDescription(
         const PipelineState& state,
+        const std::optional<int>& externalProcessReadFd,
         const std::shared_ptr<spdlog::logger>& logger)
     {
         const auto* enabledState = state.Command.TryGetEnabled();
@@ -552,14 +626,165 @@ namespace PiSubmarine::Video::Server::GStreamer
             throw std::runtime_error("Cannot build a running pipeline for a disabled video command");
         }
 
-        const auto sourceDescription = BuildSourceDescription(state.Configuration.VideoSource, logger);
-
         return std::format(
-            "{} ! queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! {} ! {} ! "
+            "{} ! {} ! "
             "multiudpsink name=subscription_sink sync=false async=false",
-            sourceDescription,
-            BuildEncoderDescription(sourceDescription, enabledState->Profile, logger),
+            BuildHeadDescription(state.Configuration.VideoHead, enabledState->Profile, externalProcessReadFd, logger),
             BuildPayloaderDescription());
+    }
+
+    Error::Api::Result<void> GstreamerPipeline::StartExternalProcess(const ExternalProcessHead& head)
+    {
+        if (m_ExternalProcessReadFd.has_value())
+        {
+            return {};
+        }
+
+        if (head.Executable.empty())
+        {
+            SPDLOG_LOGGER_ERROR(m_Logger, "External process pipeline head requires a non-empty executable");
+            SetFault(::PiSubmarine::Video::Telemetry::Api::Faults::SourceError);
+            return std::unexpected(MakePipelineError());
+        }
+
+#ifdef _WIN32
+        SPDLOG_LOGGER_ERROR(m_Logger, "External process pipeline head is not implemented on Windows");
+        SetFault(::PiSubmarine::Video::Telemetry::Api::Faults::SourceError);
+        return std::unexpected(MakePipelineError());
+#else
+        int stdoutPipe[2]{-1, -1};
+        if (pipe(stdoutPipe) != 0)
+        {
+            SPDLOG_LOGGER_ERROR(
+                m_Logger,
+                "Failed to create stdout pipe for external process '{}': {}",
+                head.Executable,
+                std::strerror(errno));
+            SetFault(::PiSubmarine::Video::Telemetry::Api::Faults::SourceError);
+            return std::unexpected(MakePipelineError());
+        }
+
+        posix_spawn_file_actions_t fileActions;
+        posix_spawn_file_actions_init(&fileActions);
+        posix_spawn_file_actions_adddup2(&fileActions, stdoutPipe[1], STDOUT_FILENO);
+        posix_spawn_file_actions_addclose(&fileActions, stdoutPipe[0]);
+        posix_spawn_file_actions_addclose(&fileActions, stdoutPipe[1]);
+
+        std::vector<std::string> ownedArguments;
+        ownedArguments.reserve(head.Arguments.size() + 1);
+        ownedArguments.push_back(head.Executable);
+        ownedArguments.insert(ownedArguments.end(), head.Arguments.begin(), head.Arguments.end());
+
+        std::vector<char*> argv;
+        argv.reserve(ownedArguments.size() + 1);
+        for (auto& argument : ownedArguments)
+        {
+            argv.push_back(argument.data());
+        }
+
+        argv.push_back(nullptr);
+
+        pid_t processId = -1;
+        const int spawnResult = posix_spawnp(
+            &processId,
+            head.Executable.c_str(),
+            &fileActions,
+            nullptr,
+            argv.data(),
+            environ);
+
+        posix_spawn_file_actions_destroy(&fileActions);
+        close(stdoutPipe[1]);
+
+        if (spawnResult != 0)
+        {
+            close(stdoutPipe[0]);
+            SPDLOG_LOGGER_ERROR(
+                m_Logger,
+                "Failed to start external process '{}': {}",
+                JoinCommandForLog(head.Executable, head.Arguments),
+                std::strerror(spawnResult));
+            SetFault(::PiSubmarine::Video::Telemetry::Api::Faults::SourceError);
+            return std::unexpected(MakePipelineError());
+        }
+
+        m_ExternalProcessId = static_cast<int>(processId);
+        m_ExternalProcessReadFd = stdoutPipe[0];
+        SPDLOG_LOGGER_INFO(
+            m_Logger,
+            "Started external video process '{}' with pid {}",
+            JoinCommandForLog(head.Executable, head.Arguments),
+            m_ExternalProcessId);
+        return {};
+#endif
+    }
+
+    void GstreamerPipeline::StopExternalProcess() noexcept
+    {
+#ifndef _WIN32
+        if (m_ExternalProcessReadFd.has_value())
+        {
+            close(*m_ExternalProcessReadFd);
+            m_ExternalProcessReadFd.reset();
+        }
+
+        if (m_ExternalProcessId > 0)
+        {
+            kill(m_ExternalProcessId, SIGTERM);
+
+            int status = 0;
+            if (waitpid(m_ExternalProcessId, &status, WNOHANG) == 0)
+            {
+                waitpid(m_ExternalProcessId, &status, 0);
+            }
+
+            m_ExternalProcessId = -1;
+        }
+#endif
+    }
+
+    void GstreamerPipeline::PollExternalProcess()
+    {
+#ifndef _WIN32
+        if (m_ExternalProcessId <= 0)
+        {
+            return;
+        }
+
+        int status = 0;
+        const auto waitResult = waitpid(m_ExternalProcessId, &status, WNOHANG);
+        if (waitResult <= 0)
+        {
+            return;
+        }
+
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+        {
+            SPDLOG_LOGGER_INFO(m_Logger, "External video process exited normally");
+        }
+        else if (WIFEXITED(status))
+        {
+            SPDLOG_LOGGER_ERROR(m_Logger, "External video process exited with code {}", WEXITSTATUS(status));
+            SetFault(::PiSubmarine::Video::Telemetry::Api::Faults::SourceError);
+        }
+        else if (WIFSIGNALED(status))
+        {
+            SPDLOG_LOGGER_ERROR(m_Logger, "External video process terminated by signal {}", WTERMSIG(status));
+            SetFault(::PiSubmarine::Video::Telemetry::Api::Faults::SourceError);
+        }
+
+        m_ExternalProcessId = -1;
+        if (m_ExternalProcessReadFd.has_value())
+        {
+            close(*m_ExternalProcessReadFd);
+            m_ExternalProcessReadFd.reset();
+        }
+
+        if (m_Pipeline)
+        {
+            static_cast<void>(Stop());
+        }
+#endif
     }
 
     void GstreamerPipeline::ApplyEndpoints(const std::vector<Subscription::Api::Endpoint>& endpoints)
